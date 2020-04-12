@@ -15,13 +15,6 @@
 
 namespace ryu {
 namespace bencode {
-enum class Type {
-    UNSPECIFIED,
-    STRING,
-    INTEGER,
-    LIST,
-    MAP,
-};
 
 class BencodeObject;
 
@@ -79,44 +72,59 @@ class EncodeResult {
     std::string str_;
 };
 
+class BencodeInteger;
+class BencodeString;
 class BencodeList;
 class BencodeMap;
 
 class BencodeObject {
   public:
-    static Result<std::unique_ptr<BencodeObject>> parse(const std::string& str, size_t* idx_inout);
-
-    BencodeObject() = delete;
     virtual ~BencodeObject() = default;
     BencodeObject(const BencodeObject&) = delete;
     BencodeObject& operator=(const BencodeObject&) = delete;
 
-    // quick accessors
-    virtual std::optional<int64_t> as_int() const {return {};}
-    virtual std::optional<std::string> as_string() const {return {};}
-    virtual std::optional<size_t> size() const {return{};}
-    template <typename T>  // T can only be uint64_t or std::string
-    std::optional<T> get(size_t index) const;
-    template <typename T>  // T can only be uint64_t or std::string
-    std::optional<T> get(const std::string& key) const;
+    // type castings, may return null
+    // TODO need const variants
+    virtual BencodeInteger* try_int_object() { return nullptr; }
+    virtual BencodeString* try_string_object() { return nullptr; }
+    virtual BencodeList* try_list_object() { return nullptr; }
+    virtual BencodeMap* try_map_object() { return nullptr; }
 
+    // quick accessors
+    virtual std::optional<int64_t> try_int() const { return {}; }
+    virtual std::optional<std::string> try_string() const { return {}; }
+    virtual std::optional<size_t> try_size() const { return {}; }
+
+    virtual std::optional<int64_t> try_int([[maybe_unused]] size_t idx) const { return {}; }
+    virtual std::optional<std::string> try_string([[maybe_unused]] size_t idx) const { return {}; }
+    virtual BencodeObject* try_object([[maybe_unused]] size_t idx) const { return {}; }
+
+    virtual std::optional<int64_t> try_int([[maybe_unused]] const std::string& key) const {
+        return {};
+    }
+    virtual std::optional<std::string> try_string([[maybe_unused]] const std::string& key) const {
+        return {};
+    }
+    virtual BencodeObject* try_object([[maybe_unused]] const std::string& key) const { return {}; }
+
+    // parser and serializer
+    static Result<std::unique_ptr<BencodeObject>> parse(const std::string& str, size_t* idx_inout);
     virtual EncodeResult encode() const;
 
   protected:
-    explicit BencodeObject(Type type) : type_(type) {}
-
-  private:
-    const Type type_;
+    BencodeObject() = default;
 };
 
 class BencodeInteger : public BencodeObject {
   public:
-    static Result<std::unique_ptr<BencodeInteger>> parse(const std::string& str, size_t* idx_inout);
-    explicit BencodeInteger(int64_t val) : BencodeObject(Type::INTEGER), val_(val) {}
-
+    // accessors
+    BencodeInteger* try_int_object() override { return this; }
+    std::optional<int64_t> try_int() const override { return val_; }
     int64_t value() const { return val_; }
 
-    std::optional<int64_t> as_int() const override {return value();}
+    // constructor, parser, serializer
+    explicit BencodeInteger(int64_t val) : BencodeObject(), val_(val) {}
+    static Result<std::unique_ptr<BencodeInteger>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
 
   private:
@@ -125,12 +133,17 @@ class BencodeInteger : public BencodeObject {
 
 class BencodeString : public BencodeObject {
   public:
+    // accessors
+    BencodeString* try_string_object() override { return this; }
+    std::optional<std::string> try_string() const override { return val_; }
+    std::string value() const { return val_; }
+
+    // constructor, parser, serializer
+    explicit BencodeString(std::string val) : BencodeObject(), val_(val) {}
     static Result<std::unique_ptr<BencodeString>> parse(const std::string& str, size_t* idx_inout);
-    explicit BencodeString(std::string val) : BencodeObject(Type::STRING), val_(val) {}
-    const std::string& value() const { return val_; };
-    std::optional<std::string> as_string() const override {return value();}
-    std::optional<size_t> size() const override {return val_.size();}
     EncodeResult encode() const override;
+
+    // directly encode
     static EncodeResult encode(const std::string& str);
 
   private:
@@ -139,16 +152,35 @@ class BencodeString : public BencodeObject {
 
 class BencodeList : public BencodeObject {
   public:
-    static Result<std::unique_ptr<BencodeList>> parse(const std::string& str, size_t* idx_inout);
-
-    BencodeList() : BencodeObject(Type::LIST) {}
-    const BencodeObject* get(size_t index) const {
-        return list_.size() > index ? list_[index].get() : nullptr;
+    // accessors
+    BencodeList* try_list_object() override { return this; }
+    std::optional<size_t> try_size() const override { return list_.size(); }
+    std::optional<int64_t> try_int(size_t idx) const override {
+        if (idx < list_.size())
+            return list_[idx]->try_int();
+        else
+            return {};
     }
-    BencodeObject* get(size_t index) { return list_.size() < index ? list_[index].get() : nullptr; }
-    void append(std::unique_ptr<BencodeObject> obj) { list_.push_back(std::move(obj)); }
-    std::optional<size_t> size() const override {return list_.size();}
+    std::optional<std::string> try_string(size_t idx) const override {
+        if (idx < list_.size())
+            return list_[idx]->try_string();
+        else
+            return {};
+    }
+    BencodeObject* try_object(size_t idx) const override {
+        if (idx < list_.size())
+            return list_[idx].get();
+        else
+            return nullptr;
+    }
+
+    // constructor, parser, serializer
+    BencodeList() = default;
+    static Result<std::unique_ptr<BencodeList>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
+
+    // modifiers
+    void append(std::unique_ptr<BencodeObject> obj) { list_.push_back(std::move(obj)); }
 
   private:
     std::vector<std::unique_ptr<BencodeObject>> list_;
@@ -156,17 +188,40 @@ class BencodeList : public BencodeObject {
 
 class BencodeMap : public BencodeObject {
   public:
-    static Result<std::unique_ptr<BencodeMap>> parse(const std::string& str, size_t* idx_inout);
+    // accessors
+    BencodeMap* try_map_object() override { return this; }
+    std::optional<size_t> try_size() const override { return map_.size(); }
+    std::optional<int64_t> try_int(const std::string& key) const override {
+        const auto& it = map_.find(key);
+        if (it != map_.end()) {
+            return it->second->try_int();
+        } else {
+            return {};
+        }
+    }
+    std::optional<std::string> try_string(const std::string& key) const override {
+        const auto& it = map_.find(key);
+        if (it != map_.end()) {
+            return it->second->try_string();
+        } else {
+            return {};
+        }
+    }
+    BencodeObject* try_object(const std::string& key) const override {
+        const auto& it = map_.find(key);
+        if (it != map_.end()) {
+            return it->second.get();
+        } else {
+            return nullptr;
+        }
+    }
 
-    BencodeMap() : BencodeObject(Type::MAP) {}
-    BencodeObject* get(const std::string& key) {
-        auto val = map_.find(key);
-        return val != map_.end() ? val->second.get() : nullptr;
-    }
-    const BencodeObject* get(const std::string& key) const {
-        auto val = map_.find(key);
-        return val != map_.end() ? val->second.get() : nullptr;
-    }
+    // constructor, parser, serializer
+    BencodeMap() = default;
+    static Result<std::unique_ptr<BencodeMap>> parse(const std::string& str, size_t* idx_inout);
+    EncodeResult encode() const override;
+
+    // modifier, return the old value if any
     std::unique_ptr<BencodeObject> set(const std::string& key, std::unique_ptr<BencodeObject> val) {
         const auto& it = map_.find(key);
         if (it == map_.end()) {
@@ -177,8 +232,6 @@ class BencodeMap : public BencodeObject {
             return val;
         }
     }
-    std::optional<size_t> size() const override {return map_.size();}
-    EncodeResult encode() const override;
 
   private:
     std::map<std::string, std::unique_ptr<BencodeObject>> map_;

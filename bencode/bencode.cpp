@@ -7,42 +7,6 @@
 namespace ryu {
 namespace bencode {
 
-template <>
-std::optional<int64_t> BencodeObject::get<int64_t>(size_t index) const {
-    if (type_ != Type::LIST) return {};
-    auto& list_obj = *dynamic_cast<const BencodeList*>(this);
-    const auto* int_obj = list_obj.get(index);
-    if (int_obj == nullptr) return {};
-    return int_obj->as_int();
-}
-
-template <>
-std::optional<std::string> BencodeObject::get<std::string>(size_t index) const {
-    if (type_ != Type::LIST) return {};
-    auto& list_obj = *dynamic_cast<const BencodeList*>(this);
-    const auto* str_obj = list_obj.get(index);
-    if (str_obj == nullptr) return {};
-    return str_obj->as_string();
-}
-
-template <>
-std::optional<int64_t> BencodeObject::get<int64_t>(const std::string& key) const {
-    if (type_ != Type::MAP) return {};
-    auto& map_obj = *dynamic_cast<const BencodeMap*>(this);
-    const auto* int_obj = map_obj.get(key);
-    if (int_obj == nullptr) return {};
-    return int_obj->as_int();
-}
-
-template <>
-std::optional<std::string> BencodeObject::get<std::string>(const std::string& key) const {
-    if (type_ != Type::MAP) return {};
-    auto& map_obj = *dynamic_cast<const BencodeMap*>(this);
-    const auto* str_obj = map_obj.get(key);
-    if (str_obj == nullptr) return {};
-    return str_obj->as_string();
-}
-
 EncodeResult BencodeObject::encode() const {
     return EncodeResult::Err("cannot encode base object");
 }
