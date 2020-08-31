@@ -10,42 +10,12 @@
 #include <variant>
 #include <vector>
 
-#include "fmt/format.h"
-#include "spdlog/spdlog.h"
+#include "result.h"
 
 namespace ryu {
 namespace bencode {
 
 class BencodeObject;
-
-template <typename T>
-class Result {
-  public:
-    static Result<T> Ok(T t) { return {std::move(t)}; }
-    static Result<T> Err(std::string err) { return {err, 0}; }
-
-    Result(T t) : ok_(true), t_(std::move(t)) {}
-    Result(std::string err_msg, [[maybe_unused]] int _) : ok_(false), err_(err_msg) {}
-
-    operator bool() const { return ok_; }
-    T& operator*() { return t_; }
-    template <typename T2>
-    Result<T2> as_type() const {
-        if (ok_) {
-            return Result<T2>::Err(fmt::format(
-                "failed to convert error result from type {} to {}, because it's not an error",
-                typeid(T).name(), typeid(T2).name()));
-        } else {
-            return Result<T2>::Err(err_);
-        }
-    }
-    const std::string& err() { return err_; }
-
-  private:
-    const bool ok_;
-    T t_;
-    const std::string err_;
-};
 
 class EncodeResult {
   public:
@@ -77,6 +47,7 @@ class BencodeString;
 class BencodeList;
 class BencodeMap;
 
+// Abstruct base class
 class BencodeObject {
   public:
     virtual ~BencodeObject() = default;
@@ -109,7 +80,10 @@ class BencodeObject {
 
     // parser and serializer
     static Result<std::unique_ptr<BencodeObject>> parse(const std::string& str, size_t* idx_inout);
-    virtual EncodeResult encode() const;
+    // convert this object to bencode format
+    virtual EncodeResult encode() const = 0;
+    // convert this object to json format
+    virtual EncodeResult json() const = 0;
 
   protected:
     BencodeObject() = default;
@@ -126,6 +100,7 @@ class BencodeInteger : public BencodeObject {
     explicit BencodeInteger(int64_t val) : BencodeObject(), val_(val) {}
     static Result<std::unique_ptr<BencodeInteger>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
+    EncodeResult json() const override;
 
   private:
     int64_t val_;
@@ -142,6 +117,7 @@ class BencodeString : public BencodeObject {
     explicit BencodeString(std::string val) : BencodeObject(), val_(val) {}
     static Result<std::unique_ptr<BencodeString>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
+    EncodeResult json() const override;
 
     // directly encode
     static EncodeResult encode(const std::string& str);
@@ -178,6 +154,7 @@ class BencodeList : public BencodeObject {
     BencodeList() = default;
     static Result<std::unique_ptr<BencodeList>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
+    EncodeResult json() const override;
 
     // modifiers
     void append(std::unique_ptr<BencodeObject> obj) { list_.push_back(std::move(obj)); }
@@ -220,6 +197,7 @@ class BencodeMap : public BencodeObject {
     BencodeMap() = default;
     static Result<std::unique_ptr<BencodeMap>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
+    EncodeResult json() const override;
 
     // modifier, return the old value if any
     std::unique_ptr<BencodeObject> set(const std::string& key, std::unique_ptr<BencodeObject> val) {

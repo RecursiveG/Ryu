@@ -1,4 +1,6 @@
 .ccls-cache
+.idea
+cmake-build-debug
+experiments
 build
 compile_commands.json
-

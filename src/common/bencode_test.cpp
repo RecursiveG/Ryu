@@ -9,8 +9,8 @@ using std::string;
     ({                                            \
         size_t idx = 0;                           \
         auto i = BencodeObject::parse(str, &idx); \
-        if (!i) FAIL() << i.err();                \
-        std::move(*i);                            \
+        if (!i.Ok()) FAIL() << i.Err();           \
+        std::move(i).Take();                      \
     })
 
 TEST(BencodeTest, ParseInt) {
