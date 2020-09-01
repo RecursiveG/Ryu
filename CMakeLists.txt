@@ -34,6 +34,11 @@ target_link_libraries(common PUBLIC absl::strings PRIVATE absl::str_format)
 ##
 ## Testing binaries
 ##
+add_executable(ryu
+        src/ryu.cpp
+        ${BACKWARD_ENABLE} src/torrent_file.cpp src/torrent_file.h)
+target_link_libraries(ryu PRIVATE common -ldw absl::flags absl::flags_parse)
+
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
     add_executable(main
         ${CMAKE_CURRENT_SOURCE_DIR}/experiments/main.cpp

@@ -104,6 +104,7 @@ class BencodeString : public BencodeObject {
 class BencodeList : public BencodeObject {
   public:
     // accessors
+    [[nodiscard]] size_t size() const { return list_.size(); }
     BencodeList* try_list_object() override { return this; }
     std::optional<size_t> try_size() const override { return list_.size(); }
     std::optional<int64_t> try_int(size_t idx) const override {

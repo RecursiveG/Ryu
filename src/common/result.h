@@ -63,6 +63,10 @@ class Result {
         if (ABSL_PREDICT_FALSE(!Ok())) throw std::logic_error("taking value of an error result");
         return std::move(t_);
     }
+    T TakeOrRaise() && {
+        if (!Ok()) throw std::logic_error(err_);
+        return std::move(t_);
+    }
 
     // Error accessors
     [[nodiscard]] const std::string& Err() const {
