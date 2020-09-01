@@ -5,72 +5,75 @@
 
 #include "absl/strings/str_format.h"
 
-namespace ryu::bencode {
+#define CONCAT(lhs, next_expression)                                           \
+    lhs = std::move(lhs).bind([&](const std::string& prefix) -> EncodeResult { \
+        ASSIGN_OR_RAISE(auto suffix, (next_expression));                       \
+        return prefix + suffix;                                                \
+    })
 
-EncodeResult BencodeInteger::encode() const {
-    return EncodeResult::Ok(absl::StrFormat("i%de", val_));
-}
-EncodeResult BencodeInteger::json() const { return EncodeResult::Ok(absl::StrFormat("%d", val_)); }
+namespace ryu {
+namespace bencode {
 
-EncodeResult BencodeString::encode() const {
-    return EncodeResult::Ok(absl::StrFormat("%d:%s", val_.size(), val_));
-}
+EncodeResult BencodeInteger::encode() const { return absl::StrFormat("i%de", val_); }
+EncodeResult BencodeInteger::json() const { return absl::StrFormat("%d", val_); }
+
+EncodeResult BencodeString::encode() const { return absl::StrFormat("%d:%s", val_.size(), val_); }
 EncodeResult BencodeString::json() const {
-    return EncodeResult::Ok(absl::StrFormat("\"%s\"", val_));  // TODO: escaping
+    return absl::StrFormat("\"%s\"", val_);  // TODO: escaping
 }
 
 EncodeResult BencodeString::encode(const std::string& str) {
-    return EncodeResult::Ok(absl::StrFormat("%d:%s", str.size(), str));
+    return absl::StrFormat("%d:%s", str.size(), str);
 }
 
 EncodeResult BencodeList::encode() const {
-    auto ret = EncodeResult::Ok("l");
+    auto ret = EncodeResult{"l"};
     for (auto& obj : list_) {
-        ret.concat([&] { return obj->encode(); });
+        CONCAT(ret, obj->encode());
     }
-    ret.concat([] { return EncodeResult::Ok("e"); });
+    CONCAT(ret, EncodeResult{"e"});
     return ret;
 }
 
 EncodeResult BencodeList::json() const {
-    auto ret = EncodeResult::Ok("[");
+    auto ret = EncodeResult("[");
     bool first = true;
     for (auto& obj : list_) {
         if (!first) {
-            ret.concat([] { return EncodeResult::Ok(","); });
+            CONCAT(ret, EncodeResult{","});
         } else {
             first = false;
         }
-        ret.concat([&] { return obj->json(); });
+        CONCAT(ret, obj->json());
     }
-    ret.concat([] { return EncodeResult::Ok("]"); });
+    CONCAT(ret, EncodeResult{"]"});
     return ret;
 }
 
 EncodeResult BencodeMap::encode() const {
-    auto ret = EncodeResult::Ok("d");
+    auto ret = EncodeResult("d");
     for (const auto& it : map_) {
-        ret.concat([&] { return BencodeString::encode(it.first); });
-        ret.concat([&] { return it.second->encode(); });
+        CONCAT(ret, BencodeString::encode(it.first));
+        CONCAT(ret, it.second->encode());
     }
-    ret.concat([] { return EncodeResult::Ok("e"); });
+    CONCAT(ret, EncodeResult{"e"});
     return ret;
 }
 
 EncodeResult BencodeMap::json() const {
-    auto ret = EncodeResult::Ok("{");
+    auto ret = EncodeResult("{");
     bool first = true;
     for (const auto& it : map_) {
         if (!first) {
-            ret.concat([] { return EncodeResult::Ok(","); });
+            CONCAT(ret, EncodeResult{","});
         } else {
             first = false;
         }
-        ret.concat([&] { return EncodeResult::Ok("\"" + it.first + "\""); });
-        ret.concat([] { return EncodeResult::Ok(":"); });
-        ret.concat([&] { return it.second->json(); });
+        CONCAT(ret, EncodeResult{"\"" + it.first + "\""});
+        CONCAT(ret, EncodeResult{":"});
+        CONCAT(ret, it.second->json());
     }
-    ret.concat([] { return EncodeResult::Ok("}"); });
+    CONCAT(ret, EncodeResult{"}"});
     return ret;
 }
 
@@ -184,4 +187,6 @@ Result<std::unique_ptr<BencodeMap>> BencodeMap::parse(const std::string& str, si
     }
     return ret;
 }
-}  // namespace ryu::bencode
+
+}  // namespace bencode
+}  // namespace ryu

@@ -44,11 +44,11 @@ TEST(BencodeTest, ParseMap) {
     EXPECT_EQ("buz", obj->try_string("bar"));
 }
 
-#define ENCODE(obj)            \
-    ({                         \
-        auto e = obj.encode(); \
-        if (!e) FAIL() << *e;  \
-        *e;                    \
+#define ENCODE(obj)                \
+    ({                             \
+        auto e = obj.encode();     \
+        if (!e) FAIL() << e.Err(); \
+        e.Value();                 \
     })
 
 TEST(BencodeTest, EncodeInt) {

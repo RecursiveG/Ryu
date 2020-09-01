@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -21,10 +22,10 @@ class Result {
                   "For Result<T>, T is required to be default constructable.");
 
   public:
-    // template<typename R, typename = typename std::enable_if<std::is_same<T, R>::value>::type>
     Result(T t) : ok_(true), t_(std::move(t)) {}
-    template <typename R>  // special convertion from Result<unique_ptr<Derived>> to
-                           // Result<unique_ptr<Base>>
+    template <typename R>
+    // special convertion from Result<unique_ptr<Derived>> to
+    // Result<unique_ptr<Base>>
     Result(Result<std::unique_ptr<R>> r)
         : ok_(r.ok_),
           t_(static_cast<typename T::element_type*>(r.t_.release())),
@@ -32,12 +33,24 @@ class Result {
     Result(UnTypedError err) : ok_(false), err_(std::move(err.msg)) {}
     Result(Result&& another) noexcept
         : ok_(another.ok_), t_(std::move(another.t_)), err_(std::move(another.err_)) {}
+    Result& operator=(Result&& another) noexcept {
+        if (this == &another) return *this;
+        ok_ = another.ok_;
+        std::swap(t_, another.t_);
+        std::swap(err_, another.err_);
+        another.ok_ = false;
+        another.err_ = "Content of this object has been moved";
+        return *this;
+    };
 
     Result(const Result&) = delete;
     Result& operator=(const Result&) = delete;
-    Result& operator=(Result&&) = delete;
 
+    // bool() operators
     [[nodiscard]] bool Ok() const { return ok_; }
+    [[nodiscard]] explicit operator bool() const { return ok_; }
+
+    // Value accessors
     T& Value() {
         if (ABSL_PREDICT_FALSE(!Ok())) throw std::logic_error("taking value of an error result");
         return t_;
@@ -51,45 +64,52 @@ class Result {
         return std::move(t_);
     }
 
-    //    template <typename T2>
-    //    Result<T2> as_type() const {
-    //        if (ok_) {
-    //            return Result<T2>::Err(fmt::format(
-    //                "failed to convert error result from type {} to {}, because it's not an
-    //                error", typeid(T).name(), typeid(T2).name()));
-    //        } else {
-    //            return Result<T2>::Err(err_);
-    //        }
-    //    }
+    // Error accessors
     [[nodiscard]] const std::string& Err() const {
         if (ABSL_PREDICT_FALSE(Ok()))
             throw std::logic_error("taking error message of an Ok result");
         return err_;
     }
-    [[nodiscard]] UnTypedError UntypedErr() && {
+    [[nodiscard]] UnTypedError TakeErr() && {
         if (ABSL_PREDICT_FALSE(Ok()))
             throw std::logic_error("taking error message of an Ok result");
-        return {err_};
+        return {std::move(err_)};
     };
+
+    // transformations
+    template <typename F, typename R = std::result_of_t<F(T)>>
+    [[nodiscard]] Result<R> fmap(const F& f) && {
+        if (Ok()) {
+            return f(std::move(t_));
+        } else {
+            return std::move(*this).TakeErr();
+        }
+    }
+    template <typename F, typename R = std::result_of_t<F(T)>>
+    // F must also return a Result<...>
+    [[nodiscard]] R bind(const F& f) && {
+        if (Ok()) {
+            return f(std::move(t_));
+        } else {
+            return std::move(*this).TakeErr();
+        }
+    }
 
   private:
     template <typename AnotherT>
     friend class Result;
-    const bool ok_;
+    bool ok_;
     T t_;
-    const std::string err_;
+    std::string err_;
 };
 
-template <typename T>
-using AllocationResult = Result<std::unique_ptr<T>>;
-
-#define ASSIGN_OR_RAISE(var, result_expr)           \
-    var = ({                                        \
-        auto result_ = (result_expr);               \
-        if (!result_.Ok()) {                        \
-            return std::move(result_).UntypedErr(); \
-        }                                           \
-        std::move(result_).Take();                  \
+#define ASSIGN_OR_RAISE(var, result_expr)        \
+    var = ({                                     \
+        auto result_ = (result_expr);            \
+        if (!result_.Ok()) {                     \
+            return std::move(result_).TakeErr(); \
+        }                                        \
+        std::move(result_).Take();               \
     })
 
 }  // namespace ryu

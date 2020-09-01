@@ -6,7 +6,8 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-using ryu::AllocationResult;
+template <typename T>
+using AllocationResult = ryu::Result<std::unique_ptr<T>>;
 using ryu::Err;
 using ryu::Result;
 
@@ -99,4 +100,66 @@ TEST(ResultTest, PointerCovariant) {
     auto y = ReturnPointerCovariant(Err("bbbb"));
     EXPECT_FALSE(y.Ok());
     EXPECT_EQ(y.Err(), "bbbb");
+}
+
+AllocationResult<Base> ReturnPointer(AllocationResult<Base> b) { return b; }
+TEST(ResultTest, SmartPointer) {
+    auto x = ReturnPointer(std::make_unique<Base>());
+    EXPECT_TRUE(x.Ok());
+    ASSERT_EQ(dynamic_cast<const Derived*>(x.Value().get()), nullptr);
+}
+
+TEST(ResultTest, ResultFmap) {
+    bool called = false;
+    Result<int> x = 0;
+    auto plus1 = [&](int v) -> int {
+        called = true;
+        return v + 1;
+    };
+
+    x = Result<int>{Err("bbz")}.fmap(plus1);
+    EXPECT_FALSE(x);
+    EXPECT_EQ(x.Err(), "bbz");
+    EXPECT_FALSE(called);
+
+    x = Result<int>{42}.fmap(plus1);
+    EXPECT_TRUE(x);
+    EXPECT_EQ(x.Value(), 43);
+    EXPECT_TRUE(called);
+}
+
+TEST(ResultTest, ResultBind) {
+    bool good_called = false;
+    bool bad_called = false;
+    auto good = [&](int x) {
+        good_called = true;
+        return Result<int>{x + 1};
+    };
+    auto bad = [&](int _ [[maybe_unused]]) -> Result<int> {
+        bad_called = true;
+        return Err("bad");
+    };
+
+    Result<int> x = 42;
+    x = std::move(x).bind(good);
+    EXPECT_TRUE(x);
+    EXPECT_EQ(x.Value(), 43);
+    EXPECT_TRUE(good_called);
+
+    good_called = false;
+    x = Result<int>{Err("fail")}.bind(good);
+    EXPECT_FALSE(x);
+    EXPECT_EQ(x.Err(), "fail");
+    EXPECT_FALSE(good_called);
+
+    x = Result<int>{42}.bind(bad);
+    EXPECT_FALSE(x);
+    EXPECT_EQ(x.Err(), "bad");
+    EXPECT_TRUE(bad_called);
+
+    bad_called = false;
+    x = Result<int>{Err("fail")}.bind(bad);
+    EXPECT_FALSE(x);
+    EXPECT_EQ(x.Err(), "fail");
+    EXPECT_FALSE(bad_called);
 }

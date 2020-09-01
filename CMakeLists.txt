@@ -34,13 +34,13 @@ target_link_libraries(common PUBLIC absl::strings PRIVATE absl::str_format)
 ##
 ## Testing binaries
 ##
-#if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
-#    add_executable(main
-#        ${CMAKE_CURRENT_SOURCE_DIR}/experiments/main.cpp
-#        ${BACKWARD_ENABLE}
-#    )
-#    target_link_libraries(main PRIVATE common spdlog -ldw)
-#endif()
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
+    add_executable(main
+        ${CMAKE_CURRENT_SOURCE_DIR}/experiments/main.cpp
+        ${BACKWARD_ENABLE}
+    )
+    target_link_libraries(main PRIVATE common -ldw)
+endif()
 
 ##
 ## Unit tests

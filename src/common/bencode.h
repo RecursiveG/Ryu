@@ -14,34 +14,9 @@
 
 namespace ryu {
 namespace bencode {
+using EncodeResult = Result<std::string>;
 
 class BencodeObject;
-
-class EncodeResult {
-  public:
-    static EncodeResult Ok(std::string bencode) { return {true, bencode}; }
-    static EncodeResult Err(std::string msg) { return {false, msg}; }
-    operator bool() const { return success_; }
-
-    const std::string& operator*() const { return str_; }
-    void concat(const std::function<const EncodeResult()>& next) {
-        if (success_) {
-            const auto n = next();
-            if (n) {
-                str_ += *n;
-            } else {
-                success_ = false;
-                str_ = *n;
-            }
-        }
-    }
-
-  private:
-    EncodeResult(bool success, std::string str) : success_(success), str_(str) {}
-    bool success_;
-    std::string str_;
-};
-
 class BencodeInteger;
 class BencodeString;
 class BencodeList;
