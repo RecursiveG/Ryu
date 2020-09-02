@@ -54,7 +54,7 @@ class TorrentFile {
     [[nodiscard]] size_t GetPieceCount() const { return hash_pool_.size() / HASH_LENGTH; }
     [[nodiscard]] std::string GetPieceHash(size_t index) const {
         if (index >= GetPieceCount())
-            throw std::invalid_argument(
+            throw std::out_of_range(
                 absl::StrFormat("hash index %u out of bound, max %u", index, GetPieceCount()));
         return hash_pool_.substr(index * HASH_LENGTH, HASH_LENGTH);
     }
@@ -68,7 +68,7 @@ class TorrentFile {
     [[nodiscard]] size_t GetPieceSize() const { return piece_length_; }
     [[nodiscard]] size_t GetPieceSize(size_t index) const {
         if (index >= GetPieceCount())
-            throw std::invalid_argument(
+            throw std::out_of_range(
                 absl::StrFormat("hash index %u out of bound, max %u", index, GetPieceCount()));
         if (index == GetPieceCount() - 1)
             return total_length_ - (GetPieceCount() - 1) * piece_length_;

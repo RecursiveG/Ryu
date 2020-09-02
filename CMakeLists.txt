@@ -64,3 +64,9 @@ add_executable(result_test
         ${BACKWARD_ENABLE})
 target_link_libraries(result_test PRIVATE common -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(result_test)
+
+add_executable(network_test
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
+        ${BACKWARD_ENABLE})
+target_link_libraries(network_test PRIVATE common -ldw GTest::GTest GTest::Main)
+gtest_discover_tests(network_test)

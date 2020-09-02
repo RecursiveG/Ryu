@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cerrno>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -7,6 +9,7 @@
 #include <utility>
 
 #include "absl/base/optimization.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 
 namespace ryu {
@@ -107,13 +110,24 @@ class Result {
     std::string err_;
 };
 
-#define ASSIGN_OR_RAISE(var, result_expr)        \
-    var = ({                                     \
-        auto result_ = (result_expr);            \
-        if (!result_.Ok()) {                     \
-            return std::move(result_).TakeErr(); \
-        }                                        \
-        std::move(result_).Take();               \
+#define ASSIGN_OR_RAISE(var, result_expr)          \
+    var = ({                                       \
+        auto result_ = (result_expr);              \
+        if (!result_.Ok()) {                       \
+            return ::std::move(result_).TakeErr(); \
+        }                                          \
+        ::std::move(result_).Take();               \
     })
+
+// This macro requires ASSERT_TRUE from gtest
+#define ASSERT_OK_AND_ASSIGN(var, result_expr)                                                  \
+    var = ({                                                                                    \
+        auto result_ = (result_expr);                                                           \
+        ASSERT_TRUE(result_.Ok()) << "Result not OK for (" #result_expr "): " << result_.Err(); \
+        ::std::move(result_).Take();                                                            \
+    })
+
+#define RAISE_ERRNO(msg) \
+    return Err(absl::StrCat("%s (errno=%d, %s)", (msg), errno, ::std::strerror(errno)))
 
 }  // namespace ryu
