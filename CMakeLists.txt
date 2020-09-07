@@ -22,7 +22,7 @@ add_subdirectory(third_party/backward-cpp)
 add_subdirectory(third_party/abseil)
 add_subdirectory(third_party/hash-library)
 include(FetchContent)
-FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/whoshuu/cpr.git GIT_TAG c8d33915dbd88ad6c92b258869b03aba06587ff9) # the commit hash for 1.5.0
+FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/whoshuu/cpr.git GIT_TAG e627e47727bfa13314dbe43418cf825097a2d38e)
 FetchContent_MakeAvailable(cpr)
 
 ##
@@ -40,8 +40,8 @@ target_link_libraries(common PUBLIC absl::strings PRIVATE absl::str_format)
 ##
 add_executable(ryu
         src/ryu.cpp
-        ${BACKWARD_ENABLE} src/torrent_file.cpp src/torrent_file.h src/os.h)
-target_link_libraries(ryu PRIVATE common -ldw absl::flags absl::flags_parse hash-library)
+        ${BACKWARD_ENABLE} src/torrent_file.cpp src/torrent_file.h src/os.h src/trackers.cpp)
+target_link_libraries(ryu PRIVATE common -ldw absl::flags absl::flags_parse hash-library cpr::cpr)
 
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
     add_executable(main

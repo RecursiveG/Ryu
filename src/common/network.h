@@ -22,6 +22,20 @@ class IpAddress {
     static_assert(STORAGE_SIZE >= sizeof(in_addr));
     static_assert(STORAGE_SIZE >= sizeof(in6_addr));
 
+    // convert IPv6 formatted v4 address to actual v4 address
+    void Normalize() {
+        if (type_ != AddressType::IPv6) return;
+        if (*reinterpret_cast<uint64_t*>(addr_) == 0 &&
+            *reinterpret_cast<uint16_t*>(&addr_[8]) == 0 &&
+            *reinterpret_cast<uint16_t*>(&addr_[10]) == 0xFFFFU) {
+            // IPv4 in IPv6 format
+            uint32_t val = *reinterpret_cast<uint32_t*>(&addr_[12]);
+            memset(addr_, 0, STORAGE_SIZE);
+            *reinterpret_cast<uint32_t*>(addr_) = val;
+            type_ = AddressType::IPv4;
+        }
+    }
+
     static Result<IpAddress> FromString(absl::string_view ip) {
         IpAddress ret{};
         memset(ret.addr_, 0, STORAGE_SIZE);
@@ -32,20 +46,27 @@ class IpAddress {
         }
         success = inet_pton(AF_INET6, ip.data(), ret.addr_);
         if (success == 1) {
-            if (*reinterpret_cast<uint64_t*>(ret.addr_) == 0 &&
-                *reinterpret_cast<uint16_t*>(&ret.addr_[8]) == 0 &&
-                *reinterpret_cast<uint16_t*>(&ret.addr_[10]) == 0xFFFFU) {
-                // IPv4 in IPv6 format
-                uint32_t val = *reinterpret_cast<uint32_t*>(&ret.addr_[12]);
-                memset(ret.addr_, 0, STORAGE_SIZE);
-                *reinterpret_cast<uint32_t*>(ret.addr_) = val;
-                ret.type_ = AddressType::IPv4;
-            } else {
-                ret.type_ = AddressType::IPv6;
-            }
+            ret.type_ = AddressType::IPv6;
+            ret.Normalize();
             return ret;
         }
         return Err(absl::StrCat("failed to parse ip address \"%s\"", ip));
+    }
+
+    static IpAddress FromBe32(uint32_t ipv4) {
+        IpAddress ret{};
+        memset(ret.addr_, 0, STORAGE_SIZE);
+        ret.type_ = AddressType::IPv4;
+        *reinterpret_cast<uint32_t*>(ret.addr_) = ipv4;
+        return ret;
+    }
+
+    static IpAddress FromBe128(const uint8_t ipv6[16]) {
+        IpAddress ret{};
+        for (int i = 15; i >= 0; i--) ret.addr_[i] = ipv6[i];
+        ret.type_ = AddressType::IPv6;
+        ret.Normalize();
+        return ret;
     }
 
     [[nodiscard]] AddressType Type() const { return type_; }
@@ -70,7 +91,7 @@ class IpAddress {
 
   private:
     AddressType type_;
-    // can be reinterpret_cast to in_addr or in6_addr
+    // can be reinterpret_cast to in_addr or in6_addr, network byte order
     uint8_t addr_[STORAGE_SIZE];
 };
 

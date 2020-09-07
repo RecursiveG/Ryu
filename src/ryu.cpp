@@ -1,9 +1,11 @@
+#include <cpr/cpr.h>
 #include <unistd.h>
 
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -12,7 +14,7 @@
 #include "os.h"
 #include "sha1.h"
 #include "torrent_file.h"
-
+#include "trackers.h"
 namespace fs = std::filesystem;
 using namespace std;
 using namespace ryu;
@@ -21,6 +23,7 @@ ABSL_FLAG(string, torrent_file, "", "Torrent file path");
 ABSL_FLAG(bool, dump_json, false, "Only dump json of the torrent file");
 ABSL_FLAG(bool, show_piece_hash, false, "Display hash for all pieces");
 ABSL_FLAG(string, verify, "", "File or folder to verify against the torrent");
+ABSL_FLAG(bool, query_peers, false, "Query first tracker for peer list");
 
 void work(string path) {
     if (absl::GetFlag(FLAGS_dump_json)) {
@@ -72,6 +75,24 @@ void work(string path) {
                                         torrent.GetPieceSize(i) / 1024.0,
                                         torrent.GetPieceHexHash(i))
                      << endl;
+            }
+        }
+        if (absl::GetFlag(FLAGS_query_peers)) {
+            auto tracker_reply = Trackers::GetPeers(torrent.announce(), torrent.GetInfoHash(),
+                                                    torrent.GetTotalSize())
+                                     .TakeOrRaise();
+            if (tracker_reply.failure_reason.empty()) {
+                cout << "Tracker interval: " << tracker_reply.interval << endl;
+                for (size_t i = 0; i < tracker_reply.peers.size(); i++) {
+                    string pid = tracker_reply.peers[i].peer_id.empty()
+                                     ? string("(----no-peer-id----)")
+                                     : tracker_reply.peers[i].peer_id;
+                    cout << absl::StrFormat("Peer #%03u %s port=% 5u %s", i + 1, pid,
+                                            tracker_reply.peers[i].port, tracker_reply.peers[i].ip)
+                         << endl;
+                }
+            } else {
+                cout << "Tracker failure: " << tracker_reply.failure_reason << endl;
             }
         }
     }
@@ -137,12 +158,12 @@ void verify(const string& torrent_path, fs::path root_folder_path) {
 int main(int argc, char* argv[]) {
     absl::ParseCommandLine(argc, argv);
     string torrent_path = absl::GetFlag(FLAGS_torrent_file);
+    string verify_path = absl::GetFlag(FLAGS_verify);
+
     if (torrent_path.empty()) {
         cout << "no torrent file specified" << endl;
         return 0;
-    }
-    string verify_path = absl::GetFlag(FLAGS_verify);
-    if (!verify_path.empty()) {
+    } else if (!verify_path.empty()) {
         verify(torrent_path, verify_path);
     } else {
         work(torrent_path);

@@ -110,15 +110,6 @@ class Result {
     std::string err_;
 };
 
-#define ASSIGN_OR_RAISE(var, result_expr)          \
-    var = ({                                       \
-        auto result_ = (result_expr);              \
-        if (!result_.Ok()) {                       \
-            return ::std::move(result_).TakeErr(); \
-        }                                          \
-        ::std::move(result_).Take();               \
-    })
-
 // This macro requires ASSERT_TRUE from gtest
 #define ASSERT_OK_AND_ASSIGN(var, result_expr)                                                  \
     var = ({                                                                                    \
@@ -129,5 +120,34 @@ class Result {
 
 #define RAISE_ERRNO(msg) \
     return Err(absl::StrCat("%s (errno=%d, %s)", (msg), errno, ::std::strerror(errno)))
+
+#define TRY(result_expr)                           \
+    ({                                             \
+        auto result_ = (result_expr);              \
+        if (!result_.Ok()) {                       \
+            return ::std::move(result_).TakeErr(); \
+        }                                          \
+        ::std::move(result_).Take();               \
+    })
+
+#define TRY_OPTIONAL(optional_expr, err_expr) \
+    ({                                        \
+        auto maybe_ = (optional_expr);        \
+        if (!maybe_) {                        \
+            return Err(err_expr);             \
+        }                                     \
+        ::std::move(*maybe_);                 \
+    })
+
+#define TRY_POINTER(ptr_expr, err_expr)   \
+    ({                                    \
+        auto maybe_nullptr_ = (ptr_expr); \
+        if (maybe_nullptr_ == nullptr) {  \
+            return Err(err_expr);         \
+        }                                 \
+        maybe_nullptr_;                   \
+    })
+
+#define ASSIGN_OR_RAISE(var, result_expr) var = TRY(result_expr)
 
 }  // namespace ryu
