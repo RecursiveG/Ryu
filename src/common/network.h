@@ -74,6 +74,23 @@ class IpAddress {
     uint8_t addr_[STORAGE_SIZE];
 };
 
+// Remote TCP or UDP endpoint
+class RemoteService {
+    enum class Type {
+        HTTP_URL,
+        TCP_IP_PORT,
+        UDP_IP_PORT,
+        TCP_DOMAIN,
+        UDP_DOMAIN,
+    };
+
+    Type type_;
+    std::string uri_;
+    IpAddress ip_;
+    uint16_t port_;
+    IpAddress local_ip_;
+};
+
 }  // namespace net
 }  // namespace ryu
 
