@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "absl/strings/str_cat.h"
+#include "sha1.h"
 using namespace std;
 
 namespace ryu {
@@ -11,6 +12,7 @@ Result<TorrentFile> TorrentFile::Load(const std::string& bytes) {
     ASSIGN_OR_RAISE(auto parsed, bencode::BencodeObject::parse(bytes, &idx));
     TorrentFile ret{};
 
+    // announce
     auto maybe_announce = parsed->try_string("announce");
     if (!maybe_announce) return Err("torrent missing announce url");
     ret.announce_ = *maybe_announce;
@@ -27,6 +29,7 @@ Result<TorrentFile> TorrentFile::Load(const std::string& bytes) {
         return ret;
     };
 
+    // announce-list
     if (parsed->try_object("announce-list")) {
         std::vector<std::vector<std::string>> groups;
         auto* announce_list = parsed->try_object("announce-list")->try_list_object();
@@ -40,24 +43,36 @@ Result<TorrentFile> TorrentFile::Load(const std::string& bytes) {
         ret.alt_announce_list_ = groups;
     }
 
+    // info
     if (parsed->try_object("info") == nullptr) return Err("torrent missing info");
     auto* info = parsed->try_object("info")->try_map_object();
     if (info == nullptr) return Err("torrent info is not a map");
+    // info hash
+    if (info->GetOriginalData().empty()) return Err("torrent info orig data is empty");
+    unsigned char info_hash_bytes[SHA1::HashBytes];
+    SHA1 hasher{};
+    hasher.add(info->GetOriginalData().data(), info->GetOriginalData().size());
+    hasher.getHash(info_hash_bytes);
+    ret.info_hash_ = string{reinterpret_cast<char*>(info_hash_bytes), SHA1::HashBytes};
 
+    // info.piece length
     auto maybe_piece_length = info->try_int("piece length");
     if (!maybe_piece_length) return Err("torrent info missing piece length");
     ret.piece_length_ = *maybe_piece_length;
 
+    // info.pieces hash
     auto maybe_hash_pool = info->try_string("pieces");
     if (!maybe_hash_pool) return Err("torrent info missing pieces");
     ret.hash_pool_ = *maybe_hash_pool;
     if ((ret.hash_pool_.size() % HASH_LENGTH) != 0)
         return Err("torrent info invalid pieces length");
 
+    // info.torrent name
     auto maybe_name = info->try_string("name");
     if (!maybe_name) return Err("torrent info missing name");
     ret.torrent_name_ = *maybe_name;
 
+    // info.file list
     if (info->try_int("length")) {
         // single file mode
         auto length = *info->try_int("length");

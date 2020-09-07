@@ -7,9 +7,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
+#include "absl/types/span.h"
 #include "result.h"
 
 namespace ryu {
@@ -59,9 +61,13 @@ class BencodeObject {
     virtual EncodeResult encode() const = 0;
     // convert this object to json format
     virtual EncodeResult json() const = 0;
+    [[nodiscard]] const std::string& GetOriginalData() const { return orig_data_; };
 
   protected:
     BencodeObject() = default;
+    explicit BencodeObject(std::string orig_data) : orig_data_(std::move(orig_data)) {}
+
+    std::string orig_data_;
 };
 
 class BencodeInteger : public BencodeObject {
@@ -72,7 +78,8 @@ class BencodeInteger : public BencodeObject {
     int64_t value() const { return val_; }
 
     // constructor, parser, serializer
-    explicit BencodeInteger(int64_t val) : BencodeObject(), val_(val) {}
+    explicit BencodeInteger(int64_t val, std::string orig_data = "")
+        : BencodeObject(std::move(orig_data)), val_(val) {}
     static Result<std::unique_ptr<BencodeInteger>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
     EncodeResult json() const override;
@@ -89,7 +96,8 @@ class BencodeString : public BencodeObject {
     std::string value() const { return val_; }
 
     // constructor, parser, serializer
-    explicit BencodeString(std::string val) : BencodeObject(), val_(val) {}
+    explicit BencodeString(std::string val, std::string orig_data = "")
+        : BencodeObject(std::move(orig_data)), val_(std::move(val)) {}
     static Result<std::unique_ptr<BencodeString>> parse(const std::string& str, size_t* idx_inout);
     EncodeResult encode() const override;
     EncodeResult json() const override;

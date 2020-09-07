@@ -100,6 +100,7 @@ Result<std::unique_ptr<BencodeObject>> BencodeObject::parse(const std::string& s
 
 Result<std::unique_ptr<BencodeInteger>> BencodeInteger::parse(const std::string& str,
                                                               size_t* idx_inout) {
+    size_t start_idx = *idx_inout;
     auto epos = str.find('e', *idx_inout);
     if (epos == std::string::npos) {
         return Err(absl::StrFormat("no ending mark found for integer at: %d", *idx_inout));
@@ -115,12 +116,13 @@ Result<std::unique_ptr<BencodeInteger>> BencodeInteger::parse(const std::string&
         if (errno == ERANGE)
             return Err(absl::StrFormat("integer value out of range: %s at %d", n_str, *idx_inout));
         *idx_inout = epos + 1;
-        return std::make_unique<BencodeInteger>(n);
+        return std::make_unique<BencodeInteger>(n, str.substr(start_idx, *idx_inout - start_idx));
     }
 }
 
 Result<std::unique_ptr<BencodeString>> BencodeString::parse(const std::string& str,
                                                             size_t* idx_inout) {
+    size_t start_idx = *idx_inout;
     auto epos = str.find(':', *idx_inout);
     if (epos == std::string::npos)
         return Err(absl::StrFormat("cannot find `:` mark for string at: %d", *idx_inout));
@@ -140,7 +142,7 @@ Result<std::unique_ptr<BencodeString>> BencodeString::parse(const std::string& s
                                    *idx_inout, len, value.size(), value));
 
     *idx_inout = epos + len + 1;
-    return std::make_unique<BencodeString>(value);
+    return std::make_unique<BencodeString>(value, str.substr(start_idx, *idx_inout - start_idx));
 }
 
 Result<std::unique_ptr<BencodeList>> BencodeList::parse(const std::string& str, size_t* idx_inout) {
@@ -157,6 +159,7 @@ Result<std::unique_ptr<BencodeList>> BencodeList::parse(const std::string& str, 
         ASSIGN_OR_RAISE(auto next, BencodeObject::parse(str, idx_inout));
         ret->append(std::move(next));
     }
+    ret->orig_data_ = str.substr(start_idx, *idx_inout - start_idx);
     return ret;
 }
 
@@ -185,6 +188,7 @@ Result<std::unique_ptr<BencodeMap>> BencodeMap::parse(const std::string& str, si
                                        *idx_inout));
         }
     }
+    ret->orig_data_ = str.substr(start_idx, *idx_inout - start_idx);
     return ret;
 }
 

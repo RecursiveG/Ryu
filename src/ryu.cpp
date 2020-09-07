@@ -55,6 +55,7 @@ void work(string path) {
         cout << "Created: " << MaybeTimeToStr(torrent.creation_date()) << endl;
         cout << "Created by: " << torrent.created_by().value_or("(-- no data --)") << endl;
         cout << "Comment: " << torrent.comment().value_or("(-- no data --)") << endl;
+        cout << "InfoHash: " << torrent.GetInfoHexHash() << endl;
         cout << absl::StrFormat("There are %u(%.02fMB) files, %u pieces. Piece size %.02fKB",
                                 torrent.GetFileCount(), torrent.GetTotalSize() / 1024.0 / 1024.0,
                                 torrent.GetPieceCount(), torrent.GetPieceSize() / 1024.0)

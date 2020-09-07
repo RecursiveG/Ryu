@@ -20,6 +20,16 @@ struct FileInfo {
     std::vector<std::string> path;  // the last segment is always the name of the file
 };
 
+namespace {
+std::string ToHex(absl::string_view buf) {
+    std::string ret;
+    for (uint8_t b : buf) {
+        absl::StrAppendFormat(&ret, "%02x", b);
+    }
+    return ret;
+}
+}  // namespace
+
 class TorrentFile {
   public:
     static constexpr size_t HASH_LENGTH = 20;  // a single un-encoded SHA-1 is 20 bytes long
@@ -59,11 +69,7 @@ class TorrentFile {
         return hash_pool_.substr(index * HASH_LENGTH, HASH_LENGTH);
     }
     [[nodiscard]] std::string GetPieceHexHash(size_t index) const {
-        std::string ret;
-        for (uint8_t b : GetPieceHash(index)) {
-            absl::StrAppendFormat(&ret, "%02x", b);
-        }
-        return ret;
+        return ToHex(GetPieceHash(index));
     }
     [[nodiscard]] size_t GetPieceSize() const { return piece_length_; }
     [[nodiscard]] size_t GetPieceSize(size_t index) const {
@@ -74,6 +80,8 @@ class TorrentFile {
             return total_length_ - (GetPieceCount() - 1) * piece_length_;
         return piece_length_;
     }
+    std::string GetInfoHash() const { return info_hash_; }
+    std::string GetInfoHexHash() const { return ToHex(GetInfoHash()); }
 
   private:
     std::unique_ptr<bencode::BencodeObject> data_;
@@ -85,6 +93,7 @@ class TorrentFile {
     std::string torrent_name_;
     std::vector<FileInfo> files_;
     std::string hash_pool_;
+    std::string info_hash_;
 };
 }  // namespace ryu
 

@@ -5,12 +5,13 @@
 using namespace ryu::bencode;
 using std::string;
 
-#define PARSE(str)                                \
-    ({                                            \
-        size_t idx = 0;                           \
-        auto i = BencodeObject::parse(str, &idx); \
-        if (!i.Ok()) FAIL() << i.Err();           \
-        std::move(i).Take();                      \
+#define PARSE(str)                                    \
+    ({                                                \
+        size_t idx = 0;                               \
+        auto i = BencodeObject::parse(str, &idx);     \
+        if (!i.Ok()) FAIL() << i.Err();               \
+        ASSERT_EQ(str, i.Value()->GetOriginalData()); \
+        std::move(i).Take();                          \
     })
 
 TEST(BencodeTest, ParseInt) {
