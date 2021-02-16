@@ -15,6 +15,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -ggdb -O0")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic")
 
+## CPR flags
+set(USE_SYSTEM_CURL YES)
+set(USE_SYSTEM_GTEST YES)
+
 ##
 ## Third party libraries
 ##
@@ -74,3 +78,9 @@ add_executable(network_test
         ${BACKWARD_ENABLE})
 target_link_libraries(network_test PRIVATE common -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(network_test)
+
+add_executable(ordered_map_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ordered_map_test.cpp
+    ${BACKWARD_ENABLE})
+target_link_libraries(ordered_map_test PRIVATE common -ldw GTest::GTest GTest::Main)
+gtest_discover_tests(ordered_map_test)
