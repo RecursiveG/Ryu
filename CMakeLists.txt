@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -ggdb -O0")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -ggdb -O0 -Wno-unused-parameter")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic")
 
 ## CPR flags
@@ -27,6 +27,11 @@ add_subdirectory(third_party/abseil)
 add_subdirectory(third_party/hash-library)
 include(FetchContent)
 FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/whoshuu/cpr.git GIT_TAG e627e47727bfa13314dbe43418cf825097a2d38e)
+FetchContent_Declare(result
+    GIT_REPOSITORY https://github.com/RecursiveG/result.git
+    GIT_TAG        8e8680449cc2764c1f6bb1696c348c54c3ef9441
+)
+FetchContent_MakeAvailable(result)
 FetchContent_MakeAvailable(cpr)
 
 ##
@@ -36,8 +41,9 @@ add_library(common STATIC)
 target_sources(common PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/common/bencode.cpp)
 target_include_directories(common PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/common)
-target_link_libraries(common PUBLIC absl::strings PRIVATE absl::str_format)
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/utils)
+target_link_libraries(common PUBLIC absl::strings result PRIVATE absl::str_format)
 
 ##
 ## Testing binaries
@@ -67,12 +73,6 @@ add_executable(bencode_test
 target_link_libraries(bencode_test PRIVATE common -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(bencode_test)
 
-add_executable(result_test
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/common/result_test.cpp
-        ${BACKWARD_ENABLE})
-target_link_libraries(result_test PRIVATE common -ldw GTest::GTest GTest::Main)
-gtest_discover_tests(result_test)
-
 add_executable(network_test
         ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
         ${BACKWARD_ENABLE})
@@ -82,5 +82,5 @@ gtest_discover_tests(network_test)
 add_executable(ordered_map_test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ordered_map_test.cpp
     ${BACKWARD_ENABLE})
-target_link_libraries(ordered_map_test PRIVATE common -ldw GTest::GTest GTest::Main)
+target_link_libraries(ordered_map_test PRIVATE -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(ordered_map_test)

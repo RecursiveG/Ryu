@@ -6,7 +6,7 @@
 #include "absl/strings/str_format.h"
 
 #define CONCAT(lhs, next_expression)                                           \
-    lhs = std::move(lhs).bind([&](const std::string& prefix) -> EncodeResult { \
+    lhs = std::move(lhs).Bind([&](const std::string& prefix) -> EncodeResult { \
         ASSIGN_OR_RAISE(auto suffix, (next_expression));                       \
         return prefix + suffix;                                                \
     })
@@ -14,28 +14,29 @@
 namespace ryu {
 namespace bencode {
 
-EncodeResult BencodeInteger::encode() const { return absl::StrFormat("i%de", val_); }
-EncodeResult BencodeInteger::json() const { return absl::StrFormat("%d", val_); }
+EncodeResult BencodeInteger::Encode() const { return absl::StrFormat("i%de", val_); }
+EncodeResult BencodeInteger::Json() const { return absl::StrFormat("%d", val_); }
 
-EncodeResult BencodeString::encode() const { return absl::StrFormat("%d:%s", val_.size(), val_); }
-EncodeResult BencodeString::json() const {
+EncodeResult BencodeString::Encode() const { return absl::StrFormat("%d:%s", val_.size(), val_); }
+EncodeResult BencodeString::Json() const {
     return absl::StrFormat("\"%s\"", val_);  // TODO: escaping
 }
 
-EncodeResult BencodeString::encode(const std::string& str) {
+EncodeResult BencodeString::Encode(const std::string& str) {
     return absl::StrFormat("%d:%s", str.size(), str);
 }
 
-EncodeResult BencodeList::encode() const {
+EncodeResult BencodeList::Encode() const {
     auto ret = EncodeResult{"l"};
     for (auto& obj : list_) {
-        CONCAT(ret, obj->encode());
+        CONCAT(ret, obj->Encode());
     }
     CONCAT(ret, EncodeResult{"e"});
     return ret;
 }
 
-EncodeResult BencodeList::json() const {
+
+EncodeResult BencodeList::Json() const {
     auto ret = EncodeResult("[");
     bool first = true;
     for (auto& obj : list_) {
@@ -44,23 +45,23 @@ EncodeResult BencodeList::json() const {
         } else {
             first = false;
         }
-        CONCAT(ret, obj->json());
+        CONCAT(ret, obj->Json());
     }
     CONCAT(ret, EncodeResult{"]"});
     return ret;
 }
 
-EncodeResult BencodeMap::encode() const {
+EncodeResult BencodeMap::Encode() const {
     auto ret = EncodeResult("d");
     for (const auto& it : map_) {
-        CONCAT(ret, BencodeString::encode(it.first));
-        CONCAT(ret, it.second->encode());
+        CONCAT(ret, BencodeString::Encode(it.first));
+        CONCAT(ret, it.second->Encode());
     }
     CONCAT(ret, EncodeResult{"e"});
     return ret;
 }
 
-EncodeResult BencodeMap::json() const {
+EncodeResult BencodeMap::Json() const {
     auto ret = EncodeResult("{");
     bool first = true;
     for (const auto& it : map_) {
@@ -71,34 +72,34 @@ EncodeResult BencodeMap::json() const {
         }
         CONCAT(ret, EncodeResult{"\"" + it.first + "\""});
         CONCAT(ret, EncodeResult{":"});
-        CONCAT(ret, it.second->json());
+        CONCAT(ret, it.second->Json());
     }
     CONCAT(ret, EncodeResult{"}"});
     return ret;
 }
 
-Result<std::unique_ptr<BencodeObject>> BencodeObject::parse(const std::string& str,
+PointerResult<BencodeObject> BencodeObject::Parse(const std::string& str,
                                                             size_t* idx_inout) {
     if (*idx_inout >= str.size())
         return Err(absl::StrFormat("expecting object but end of input reached"));
     switch (str[*idx_inout]) {
         case 'i':
-            return BencodeInteger::parse(str, idx_inout);
+            return BencodeInteger::Parse(str, idx_inout);
         case 'd':
-            return BencodeMap::parse(str, idx_inout);
+            return BencodeMap::Parse(str, idx_inout);
         case 'l':
-            return BencodeList::parse(str, idx_inout);
+            return BencodeList::Parse(str, idx_inout);
         default: {
             if (str[*idx_inout] < '0' || str[*idx_inout] > '9') {
                 return Err(
                     absl::StrFormat("invalid object type %c at %d", str[*idx_inout], *idx_inout));
             }
-            return BencodeString::parse(str, idx_inout);
+            return BencodeString::Parse(str, idx_inout);
         }
     }
 }
 
-Result<std::unique_ptr<BencodeInteger>> BencodeInteger::parse(const std::string& str,
+PointerResult<BencodeInteger> BencodeInteger::Parse(const std::string& str,
                                                               size_t* idx_inout) {
     size_t start_idx = *idx_inout;
     auto epos = str.find('e', *idx_inout);
@@ -116,11 +117,11 @@ Result<std::unique_ptr<BencodeInteger>> BencodeInteger::parse(const std::string&
         if (errno == ERANGE)
             return Err(absl::StrFormat("integer value out of range: %s at %d", n_str, *idx_inout));
         *idx_inout = epos + 1;
-        return std::make_unique<BencodeInteger>(n, str.substr(start_idx, *idx_inout - start_idx));
+        return std::make_unique<BencodeInteger>(n);
     }
 }
 
-Result<std::unique_ptr<BencodeString>> BencodeString::parse(const std::string& str,
+PointerResult<BencodeString> BencodeString::Parse(const std::string& str,
                                                             size_t* idx_inout) {
     size_t start_idx = *idx_inout;
     auto epos = str.find(':', *idx_inout);
@@ -142,10 +143,10 @@ Result<std::unique_ptr<BencodeString>> BencodeString::parse(const std::string& s
                                    *idx_inout, len, value.size(), value));
 
     *idx_inout = epos + len + 1;
-    return std::make_unique<BencodeString>(value, str.substr(start_idx, *idx_inout - start_idx));
+    return std::make_unique<BencodeString>(value);
 }
 
-Result<std::unique_ptr<BencodeList>> BencodeList::parse(const std::string& str, size_t* idx_inout) {
+PointerResult<BencodeList> BencodeList::Parse(const std::string& str, size_t* idx_inout) {
     size_t start_idx = *idx_inout;
     auto ret = std::make_unique<BencodeList>();
     ++*idx_inout;
@@ -156,14 +157,13 @@ Result<std::unique_ptr<BencodeList>> BencodeList::parse(const std::string& str, 
             ++*idx_inout;
             break;
         }
-        ASSIGN_OR_RAISE(auto next, BencodeObject::parse(str, idx_inout));
-        ret->append(std::move(next));
+        ASSIGN_OR_RAISE(auto next, BencodeObject::Parse(str, idx_inout));
+        ret->Add(std::move(next));
     }
-    ret->orig_data_ = str.substr(start_idx, *idx_inout - start_idx);
     return ret;
 }
 
-Result<std::unique_ptr<BencodeMap>> BencodeMap::parse(const std::string& str, size_t* idx_inout) {
+PointerResult<BencodeMap> BencodeMap::Parse(const std::string& str, size_t* idx_inout) {
     size_t start_idx = *idx_inout;
     auto ret = std::make_unique<BencodeMap>();
     ++*idx_inout;
@@ -174,21 +174,22 @@ Result<std::unique_ptr<BencodeMap>> BencodeMap::parse(const std::string& str, si
             ++*idx_inout;
             break;
         } else if ('0' <= str[*idx_inout] && str[*idx_inout] <= '9') {
-            ASSIGN_OR_RAISE(auto key, BencodeString::parse(str, idx_inout));
+            ASSIGN_OR_RAISE(auto key, BencodeString::Parse(str, idx_inout));
             if (*idx_inout >= str.size())
                 return Err(absl::StrFormat("map at %d ends prematurely", start_idx));
-            ASSIGN_OR_RAISE(auto value, BencodeObject::parse(str, idx_inout));
+            ASSIGN_OR_RAISE(auto value, BencodeObject::Parse(str, idx_inout));
 
-            auto replaced = ret->set(key->value(), std::move(value));
-            if (replaced != nullptr)
+            if (ret->Contains(key->GetString().value())) {
                 return Err(
-                    absl::StrFormat("duplicated key %s in map at %d", key->value(), start_idx));
+                    absl::StrFormat("duplicated key %s in map at %d", key->GetString().value(), start_idx));
+            }
+            
+            ret->Set(key->GetString().value(), std::move(value));
         } else {
             return Err(absl::StrFormat("map at %d requires a string-type key at %d", start_idx,
                                        *idx_inout));
         }
     }
-    ret->orig_data_ = str.substr(start_idx, *idx_inout - start_idx);
     return ret;
 }
 
