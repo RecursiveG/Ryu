@@ -18,7 +18,7 @@ namespace ryu {
 namespace os {
 class AutoFd {
   public:
-    static Result<AutoFd> open(const std::string& file_path, int mode) {
+    static Result<AutoFd, std::string> open(const std::string& file_path, int mode) {
         int fd = ::open(file_path.c_str(), mode);
         if (fd < 0) RAISE_ERRNO("failed to open file: " + file_path);
         return AutoFd{fd};

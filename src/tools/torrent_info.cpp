@@ -9,12 +9,14 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/flags/usage.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "os.h"
 #include "sha1.h"
 #include "torrent_file.h"
 #include "trackers.h"
+
 namespace fs = std::filesystem;
 using namespace std;
 using namespace ryu;
@@ -23,7 +25,7 @@ ABSL_FLAG(string, torrent_file, "", "Torrent file path");
 ABSL_FLAG(bool, dump_json, false, "Only dump json of the torrent file");
 ABSL_FLAG(bool, show_piece_hash, false, "Display hash for all pieces");
 ABSL_FLAG(string, verify, "", "File or folder to verify against the torrent");
-ABSL_FLAG(bool, query_peers, false, "Query first tracker for peer list");
+ABSL_FLAG(int, query_peers, -1, "Query Nth tracker for peer list");
 
 void work(string path) {
     if (absl::GetFlag(FLAGS_dump_json)) {
@@ -32,8 +34,8 @@ void work(string path) {
             std::string data{std::istreambuf_iterator<char>(ifile),
                              std::istreambuf_iterator<char>{}};
             size_t idx = 0;
-            auto parsed = bencode::BencodeObject::parse(data, &idx).TakeOrRaise();
-            auto json = parsed->json().TakeOrRaise();
+            auto parsed = bencode::BencodeObject::Parse(data, &idx).Expect("unable to parse data");
+            auto json = parsed->Json().Expect("unable to serialize to json");
             cout << json << endl;
         } else {
             std::cout << "failed to open file" << endl;
@@ -43,7 +45,7 @@ void work(string path) {
             if (!t) return "(-- no data --)";
             return absl::FormatTime(*t, absl::LocalTimeZone());
         };
-        auto torrent = TorrentFile::LoadFile(path).TakeOrRaise();
+        auto torrent = TorrentFile::LoadFile(path).Expect("unable to load torrent file");
         cout << "Torrent name: " << torrent.name() << endl;
         cout << "Announce URLs:" << endl;
         cout << "  - " << torrent.announce() << endl;
@@ -77,10 +79,13 @@ void work(string path) {
                      << endl;
             }
         }
-        if (absl::GetFlag(FLAGS_query_peers)) {
-            auto tracker_reply = Trackers::GetPeers(torrent.announce(), torrent.GetInfoHash(),
+        if (absl::GetFlag(FLAGS_query_peers) >= 0) {
+            int idx = absl::GetFlag(FLAGS_query_peers);
+            string announce = (idx == 0) ? torrent.announce() : torrent.announce_list()->at(idx-1)[0];
+            cout << "Quering: " << announce << endl;
+            auto tracker_reply = Trackers::GetPeers(announce, torrent.GetInfoHash(),
                                                     torrent.GetTotalSize())
-                                     .TakeOrRaise();
+                                     .Expect("unable to parse tracker reply");
             if (tracker_reply.failure_reason.empty()) {
                 cout << "Tracker interval: " << tracker_reply.interval << endl;
                 for (size_t i = 0; i < tracker_reply.peers.size(); i++) {
@@ -99,7 +104,7 @@ void work(string path) {
 }
 
 void verify(const string& torrent_path, fs::path root_folder_path) {
-    auto torrent = TorrentFile::LoadFile(torrent_path).TakeOrRaise();
+    auto torrent = TorrentFile::LoadFile(torrent_path).Expect("unable to load torrent file");
     auto GetFilePath = [&root_folder_path, &torrent](size_t index) {
         auto new_path = root_folder_path;
         const auto& path_comp = torrent.GetFileInfo(index).path;
@@ -108,7 +113,7 @@ void verify(const string& torrent_path, fs::path root_folder_path) {
     };
 
     size_t current_file = 0;
-    auto fd = os::AutoFd::open(GetFilePath(current_file), O_RDONLY).TakeOrRaise();
+    auto fd = os::AutoFd::open(GetFilePath(current_file), O_RDONLY).Expect("failed to open file");
     auto buf = std::make_unique<uint8_t[]>(torrent.GetPieceSize());
 
     auto fill_buffer = [&](uint64_t read_size) {
@@ -120,7 +125,8 @@ void verify(const string& torrent_path, fs::path root_folder_path) {
                 throw runtime_error(
                     absl::StrCat("fail to read from fd ", fd.get(), " ", strerror(errno)));
             } else if (red == 0) {
-                fd = os::AutoFd::open(GetFilePath(++current_file), O_RDONLY).TakeOrRaise();
+                fd = os::AutoFd::open(GetFilePath(++current_file), O_RDONLY)
+                         .Expect("failed to open file");
             } else {
                 offset += red;
             }
@@ -156,6 +162,7 @@ void verify(const string& torrent_path, fs::path root_folder_path) {
 }
 
 int main(int argc, char* argv[]) {
+    absl::SetProgramUsageMessage("--torrent_file [--verify | --dump_json | [--query_peers] [-show_piece_hash]]");
     absl::ParseCommandLine(argc, argv);
     string torrent_path = absl::GetFlag(FLAGS_torrent_file);
     string verify_path = absl::GetFlag(FLAGS_verify);

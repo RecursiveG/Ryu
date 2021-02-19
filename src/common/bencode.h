@@ -131,6 +131,7 @@ class BencodeList : public BencodeObject {
     bool IsList() const override { return true; }
     // list only
     const BencodeObject& operator[](size_t index) const override {
+        if (index >= list_.size()) return *invalid();
         return *list_.at(index).get();
     }
     bool Add(std::unique_ptr<BencodeObject> obj) override { 
@@ -168,6 +169,7 @@ class BencodeMap : public BencodeObject {
     bool IsMap() const override { return true; }
     // map only
     const BencodeObject& operator[](const std::string& key) const override {
+        if (!map_.contains(key)) return *invalid();
         return *map_[key].get();
     }
     bool Set(const std::string& key, std::unique_ptr<BencodeObject> obj) override {

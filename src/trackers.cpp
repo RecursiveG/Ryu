@@ -111,7 +111,7 @@ Result<TrackerReply, std::string> Trackers::GetPeers(const std::string& announce
         cpr::Get(cpr::Url{announce}, cpr::Parameters{{"info_hash", info_hash},
                                                      {"peer_id", "-RY0000-0123456789ab"},
                                                      {"port", "6881"},
-                                                     {"uplaoded", "0"},
+                                                     {"uploaded", "0"},
                                                      {"downloaded", "0"},
                                                      {"left", absl::StrCat(left_bytes)},
                                                      {"event", "started"}});

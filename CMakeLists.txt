@@ -72,12 +72,17 @@ target_link_libraries(trackers
     PRIVATE absl::str_format)
 
 ##
-## Testing binaries
+## Tools
 ##
-# add_executable(ryu
-#         src/ryu.cpp
-#         ${BACKWARD_ENABLE} src/torrent_file.cpp src/torrent_file.h src/os.h src/trackers.cpp)
-# target_link_libraries(ryu PRIVATE common -ldw absl::flags absl::flags_parse hash-library cpr::cpr)
+add_executable(torrent_info
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tools/torrent_info.cpp
+    ${BACKWARD_ENABLE}
+)
+target_include_directories(torrent_info PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(torrent_info PRIVATE
+    -ldw absl::flags absl::flags_parse absl::str_format
+    bencode torrent_file trackers hash-library cpr::cpr
+)
 
 # if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
 #     add_executable(main
