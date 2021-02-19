@@ -44,7 +44,12 @@ class BencodeObject {
     BencodeObject(const BencodeObject&) = delete;
     BencodeObject& operator=(const BencodeObject&) = delete;
 
+    // type check
     virtual Type GetType() const { return Type::Invalid; }
+    virtual bool IsInteger() const { return false; }
+    virtual bool IsString() const { return false; }
+    virtual bool IsList() const { return false; }
+    virtual bool IsMap() const { return false; }
     // int only
     virtual std::optional<int64_t> GetInt() const { return {}; }
     virtual bool Set(int64_t val) { return false; }
@@ -84,6 +89,7 @@ class BencodeObject {
 class BencodeInteger : public BencodeObject {
   public:
     Type GetType() const override { return Type::Integer; }
+    bool IsInteger() const override { return true; }
     // int only
     std::optional<int64_t> GetInt() const override { return val_; }
     bool Set(int64_t val) override { val_ = val; return true; }
@@ -101,6 +107,7 @@ class BencodeInteger : public BencodeObject {
 class BencodeString : public BencodeObject {
   public:
     Type GetType() const override { return Type::String; }
+    bool IsString() const override { return true; }
     // string only
     std::optional<std::string> GetString() const override { return val_; }
     bool Set(const std::string& str) override { val_ = str; return true; }
@@ -121,6 +128,7 @@ class BencodeString : public BencodeObject {
 class BencodeList : public BencodeObject {
   public:
     Type GetType() const override { return Type::List; }
+    bool IsList() const override { return true; }
     // list only
     const BencodeObject& operator[](size_t index) const override {
         return *list_.at(index).get();
@@ -157,6 +165,7 @@ class BencodeList : public BencodeObject {
 class BencodeMap : public BencodeObject {
   public:
     Type GetType() const override { return Type::Map; }
+    bool IsMap() const override { return true; }
     // map only
     const BencodeObject& operator[](const std::string& key) const override {
         return *map_[key].get();

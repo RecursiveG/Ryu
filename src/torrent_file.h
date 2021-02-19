@@ -5,12 +5,13 @@
 #include <optional>
 #include <stdexcept>
 #include <vector>
+#include <string>
 
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "bencode.h"
+#include "common/bencode.h"
 #include "result.h"
 
 namespace ryu {
@@ -33,8 +34,8 @@ std::string ToHex(absl::string_view buf) {
 class TorrentFile {
   public:
     static constexpr size_t HASH_LENGTH = 20;  // a single un-encoded SHA-1 is 20 bytes long
-    static Result<TorrentFile> Load(const std::string& bytes);
-    static Result<TorrentFile> LoadFile(absl::string_view file_path);
+    static Result<TorrentFile, std::string> Load(const std::string& bytes);
+    static Result<TorrentFile, std::string> LoadFile(absl::string_view file_path);
 
     TorrentFile() = default;
 
@@ -44,17 +45,18 @@ class TorrentFile {
         return alt_announce_list_;
     }
     [[nodiscard]] std::optional<absl::Time> creation_date() const {
-        if (data_->try_int("creation date")) {
-            return absl::FromUnixSeconds(*data_->try_int("creation date"));
+        auto maybe_date = (*data_)["creation date"].GetInt();
+        if (maybe_date) {
+            return absl::FromUnixSeconds(*maybe_date);
         } else {
             return {};
         }
     }
     [[nodiscard]] std::optional<std::string> comment() const {
-        return data_->try_string("comment");
+        return (*data_)["comment"].GetString();
     }
     [[nodiscard]] std::optional<std::string> created_by() const {
-        return data_->try_string("created by");
+        return (*data_)["created by"].GetString();
     }
     [[nodiscard]] size_t GetTotalSize() const { return total_length_; }
 

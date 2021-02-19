@@ -1,104 +1,103 @@
 #include "torrent_file.h"
 
 #include <fstream>
+#include <string>
 
 #include "absl/strings/str_cat.h"
 #include "sha1.h"
 using namespace std;
 
 namespace ryu {
-Result<TorrentFile> TorrentFile::Load(const std::string& bytes) {
+Result<TorrentFile, std::string> TorrentFile::Load(const std::string& bytes) {
     size_t idx = 0;
-    ASSIGN_OR_RAISE(auto parsed, bencode::BencodeObject::parse(bytes, &idx));
+    ASSIGN_OR_RAISE(auto parsed_ptr, bencode::BencodeObject::Parse(bytes, &idx));
+    const bencode::BencodeObject& parsed = *parsed_ptr;
     TorrentFile ret{};
 
     // announce
-    auto maybe_announce = parsed->try_string("announce");
+    auto maybe_announce = parsed["announce"].GetString();
     if (!maybe_announce) return Err("torrent missing announce url");
     ret.announce_ = *maybe_announce;
 
-    auto ToStringVector = [](bencode::BencodeList* blist) -> Result<std::vector<std::string>> {
+    auto ToStringVector =
+        [](const bencode::BencodeList* blist) -> Result<std::vector<std::string>, std::string> {
         std::vector<std::string> ret;
-        for (size_t j = 0; j < blist->size(); j++) {
-            auto maybe_str = blist->try_string(j);
+        for (size_t j = 0; j < blist->Size(); j++) {
+            auto maybe_str = (*blist)[j].GetString();
             if (!maybe_str)
-                return Err("list element is not string: " +
-                           blist->try_object(j)->json().TakeOrRaise());
+                return Err("list element is not string: " + VALUE_OR_RAISE((*blist)[j].Json()));
             ret.push_back(std::move(*maybe_str));
         }
         return ret;
     };
 
     // announce-list
-    if (parsed->try_object("announce-list")) {
+    if (parsed.Contains("announce-list")) {
         std::vector<std::vector<std::string>> groups;
-        auto* announce_list = parsed->try_object("announce-list")->try_list_object();
-        if (nullptr == announce_list) return Err("announce-list is not a list");
-        for (idx = 0; idx < announce_list->size(); idx++) {
-            auto* sublist = announce_list->try_object(idx)->try_list_object();
-            if (nullptr == sublist) return Err("sub announce-list is not a list");
-            ASSIGN_OR_RAISE(auto group, ToStringVector(sublist));
+        if (parsed["announce-list"].GetType() != bencode::Type::List) {
+            return Err("announce-list is not a list");
+        }
+        const auto& announce_list = parsed["announce-list"];
+
+        for (idx = 0; idx < announce_list.Size(); idx++) {
+            if (announce_list[idx].GetType() != bencode::Type::List) {
+                return Err("sub announce-list is not a list");
+            }
+            ASSIGN_OR_RAISE(
+                auto group,
+                ToStringVector(static_cast<const bencode::BencodeList*>(&announce_list[idx])));
             groups.push_back(group);
         }
         ret.alt_announce_list_ = groups;
     }
 
     // info
-    if (parsed->try_object("info") == nullptr) return Err("torrent missing info");
-    auto* info = parsed->try_object("info")->try_map_object();
-    if (info == nullptr) return Err("torrent info is not a map");
+    if (!parsed.Contains("info")) return Err("torrent missing info");
+    if (!parsed["info"].IsMap()) return Err("torrent info is not a map");
+    const auto& info = parsed["info"];
     // info hash
-    if (info->GetOriginalData().empty()) return Err("torrent info orig data is empty");
     unsigned char info_hash_bytes[SHA1::HashBytes];
+    std::string info_data = VALUE_OR_RAISE(info.Encode());
     SHA1 hasher{};
-    hasher.add(info->GetOriginalData().data(), info->GetOriginalData().size());
+    hasher.add(info_data.c_str(), info_data.size());
     hasher.getHash(info_hash_bytes);
     ret.info_hash_ = string{reinterpret_cast<char*>(info_hash_bytes), SHA1::HashBytes};
 
     // info.piece length
-    auto maybe_piece_length = info->try_int("piece length");
-    if (!maybe_piece_length) return Err("torrent info missing piece length");
-    ret.piece_length_ = *maybe_piece_length;
+    ret.piece_length_ =
+        OPTIONAL_OR_RAISE(info["piece length"].GetInt(), "torrent info missing piece length");
 
     // info.pieces hash
-    auto maybe_hash_pool = info->try_string("pieces");
-    if (!maybe_hash_pool) return Err("torrent info missing pieces");
-    ret.hash_pool_ = *maybe_hash_pool;
+    ret.hash_pool_ = OPTIONAL_OR_RAISE(info["pieces"].GetString(), "torrent info missing pieces");
     if ((ret.hash_pool_.size() % HASH_LENGTH) != 0)
         return Err("torrent info invalid pieces length");
 
     // info.torrent name
-    auto maybe_name = info->try_string("name");
-    if (!maybe_name) return Err("torrent info missing name");
-    ret.torrent_name_ = *maybe_name;
+    ret.torrent_name_ = OPTIONAL_OR_RAISE(info["name"].GetString(), "torrent info missing name");
 
     // info.file list
-    if (info->try_int("length")) {
+    if (info["length"].IsInteger()) {
         // single file mode
-        auto length = *info->try_int("length");
+        auto length = info["length"].GetInt().value();
         ret.files_.push_back(FileInfo{static_cast<uint64_t>(length), {ret.torrent_name_}});
         ret.total_length_ = length;
     } else {
         // multi file mode
         ret.total_length_ = 0;
-        if (info->try_object("files") == nullptr)
-            return Err("torrent info missing files or length");
-        auto* files = info->try_object("files")->try_list_object();
-        if (files == nullptr) return Err("torrent info files is not a list");
-        for (size_t i = 0; i < files->size(); i++) {
-            auto* finfo = files->try_object(i)->try_map_object();
-            if (finfo == nullptr) return Err("torrent info files element is not map");
-            auto maybe_length = finfo->try_int("length");
-            if (!maybe_length) return Err("torrent info files element missing length");
+        const auto& files = info["files"];
+        if (!files.IsList()) return Err("torrent info missing files or length");
 
-            if (finfo->try_object("path") == nullptr)
-                return Err("torrent info files element missing path");
-            auto* path = finfo->try_object("path")->try_list_object();
-            if (path == nullptr) return Err("torrent info files element path is not a list");
-            ASSIGN_OR_RAISE(auto path_v, ToStringVector(path));
+        for (size_t i = 0; i < files.Size(); i++) {
+            size_t length = OPTIONAL_OR_RAISE(files[i]["length"].GetInt(),
+                                              "torrent info files element missing length");
+            const auto& path = files[i]["path"];
+            if (!path.IsList()) return Err("torrent info files element path is not a list");
+
+            ASSIGN_OR_RAISE(auto path_v,
+                            ToStringVector(dynamic_cast<const bencode::BencodeList*>(&path)));
             path_v.insert(path_v.begin(), ret.torrent_name_);
-            ret.files_.push_back(FileInfo{static_cast<uint64_t>(*maybe_length), path_v});
-            ret.total_length_ += *maybe_length;
+            ret.files_.push_back(FileInfo{static_cast<uint64_t>(length), path_v});
+            ret.total_length_ += length;
         }
     }
     if (ret.piece_length_ * ret.GetPieceCount() - ret.total_length_ >= ret.piece_length_)
@@ -106,11 +105,11 @@ Result<TorrentFile> TorrentFile::Load(const std::string& bytes) {
                    absl::StrCat("total:", ret.total_length_, " piece_len:", ret.piece_length_,
                                 " hash_len:", ret.hash_pool_.length(),
                                 " piece_count:", ret.GetPieceCount()));
-    ret.data_ = std::move(parsed);
+    ret.data_ = std::move(parsed_ptr);
     return ret;
 }
 
-Result<TorrentFile> TorrentFile::LoadFile(absl::string_view file_path) {
+Result<TorrentFile, std::string> TorrentFile::LoadFile(absl::string_view file_path) {
     ifstream ifile{string{file_path}, ios::binary};
     if (ifile) {
         std::string data{std::istreambuf_iterator<char>(ifile), std::istreambuf_iterator<char>{}};

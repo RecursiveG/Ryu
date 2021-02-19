@@ -61,6 +61,11 @@ file(GLOB hash-library_SOURCE_FILES ${hash-library_SOURCE_DIR}/*.cpp)
 add_library(hash-library STATIC ${hash-library_SOURCE_FILES})
 target_include_directories(hash-library PUBLIC ${hash-library_SOURCE_DIR})
 
+add_library(torrent_file STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/torrent_file.cpp)
+target_link_libraries(torrent_file
+    PUBLIC absl::strings absl::str_format bencode
+    PRIVATE hash-library)
+
 ##
 ## Testing binaries
 ##
