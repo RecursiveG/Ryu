@@ -89,11 +89,11 @@ add_executable(bencode_test
 target_link_libraries(bencode_test PRIVATE bencode -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(bencode_test)
 
-# add_executable(network_test
-#         ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
-#         ${BACKWARD_ENABLE})
-# target_link_libraries(network_test PRIVATE common -ldw GTest::GTest GTest::Main)
-# gtest_discover_tests(network_test)
+add_executable(network_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
+    ${BACKWARD_ENABLE})
+target_link_libraries(network_test PRIVATE -ldw GTest::GTest GTest::Main absl::strings result)
+gtest_discover_tests(network_test)
 
 add_executable(ordered_map_test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ordered_map_test.cpp

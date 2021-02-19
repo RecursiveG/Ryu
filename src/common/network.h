@@ -36,7 +36,7 @@ class IpAddress {
         }
     }
 
-    static Result<IpAddress> FromString(absl::string_view ip) {
+    static Result<IpAddress, std::string> FromString(absl::string_view ip) {
         IpAddress ret{};
         memset(ret.addr_, 0, STORAGE_SIZE);
         int success = inet_pton(AF_INET, ip.data(), ret.addr_);
@@ -80,7 +80,7 @@ class IpAddress {
                 throw std::runtime_error("bug");
         }
     };
-    [[nodiscard]] Result<std::string> ToString() const {
+    [[nodiscard]] Result<std::string, std::string> ToString() const {
         char ret[INET6_ADDRSTRLEN];
         const char* err_val = inet_ntop(AddressFamily(), addr_, ret, INET6_ADDRSTRLEN);
         if (err_val == nullptr) {
