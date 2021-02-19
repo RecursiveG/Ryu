@@ -22,44 +22,60 @@ set(USE_SYSTEM_GTEST YES)
 ##
 ## Third party libraries
 ##
-add_subdirectory(third_party/backward-cpp)
-add_subdirectory(third_party/abseil)
-add_subdirectory(third_party/hash-library)
 include(FetchContent)
-FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/whoshuu/cpr.git GIT_TAG e627e47727bfa13314dbe43418cf825097a2d38e)
+FetchContent_Declare(cpr
+    GIT_REPOSITORY https://github.com/whoshuu/cpr.git
+    GIT_TAG        e627e47727bfa13314dbe43418cf825097a2d38e)
 FetchContent_Declare(result
     GIT_REPOSITORY https://github.com/RecursiveG/result.git
     GIT_TAG        8e8680449cc2764c1f6bb1696c348c54c3ef9441
 )
-FetchContent_MakeAvailable(result)
+FetchContent_Declare(abseil-cpp
+    GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+    GIT_TAG        20200923.2
+)
+FetchContent_Declare(backward-cpp
+    GIT_REPOSITORY https://github.com/bombela/backward-cpp.git
+    GIT_TAG        v1.5
+)
+FetchContent_Declare(hash-library
+    GIT_REPOSITORY https://github.com/stbrumme/hash-library.git
+    GIT_TAG        hash_library_v8
+)
 FetchContent_MakeAvailable(cpr)
+FetchContent_MakeAvailable(result)
+FetchContent_MakeAvailable(abseil-cpp)
+FetchContent_MakeAvailable(backward-cpp)
+FetchContent_MakeAvailable(hash-library)
 
 ##
-## Supporting libraries
+## Components
 ##
-add_library(common STATIC)
-target_sources(common PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/common/bencode.cpp)
-target_include_directories(common PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/common
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/utils)
-target_link_libraries(common PUBLIC absl::strings result PRIVATE absl::str_format)
+add_library(bencode STATIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common/bencode.cpp)
+target_include_directories(bencode PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(bencode PUBLIC result PRIVATE absl::str_format)
+
+file(GLOB hash-library_SOURCE_FILES ${hash-library_SOURCE_DIR}/*.cpp)
+add_library(hash-library STATIC ${hash-library_SOURCE_FILES})
+target_include_directories(hash-library PUBLIC ${hash-library_SOURCE_DIR})
 
 ##
 ## Testing binaries
 ##
-add_executable(ryu
-        src/ryu.cpp
-        ${BACKWARD_ENABLE} src/torrent_file.cpp src/torrent_file.h src/os.h src/trackers.cpp)
-target_link_libraries(ryu PRIVATE common -ldw absl::flags absl::flags_parse hash-library cpr::cpr)
+# add_executable(ryu
+#         src/ryu.cpp
+#         ${BACKWARD_ENABLE} src/torrent_file.cpp src/torrent_file.h src/os.h src/trackers.cpp)
+# target_link_libraries(ryu PRIVATE common -ldw absl::flags absl::flags_parse hash-library cpr::cpr)
 
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
-    add_executable(main
-        ${CMAKE_CURRENT_SOURCE_DIR}/experiments/main.cpp
-        ${BACKWARD_ENABLE}
-    )
-    target_link_libraries(main PRIVATE common -ldw)
-endif()
+# if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
+#     add_executable(main
+#         ${CMAKE_CURRENT_SOURCE_DIR}/experiments/main.cpp
+#         ${BACKWARD_ENABLE}
+#     )
+#     target_link_libraries(main PRIVATE common -ldw)
+# endif()
 
 ##
 ## Unit tests
@@ -70,17 +86,20 @@ find_package(GTest REQUIRED)
 add_executable(bencode_test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common/bencode_test.cpp
     ${BACKWARD_ENABLE})
-target_link_libraries(bencode_test PRIVATE common -ldw GTest::GTest GTest::Main)
+target_link_libraries(bencode_test PRIVATE bencode -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(bencode_test)
 
-add_executable(network_test
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
-        ${BACKWARD_ENABLE})
-target_link_libraries(network_test PRIVATE common -ldw GTest::GTest GTest::Main)
-gtest_discover_tests(network_test)
+# add_executable(network_test
+#         ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
+#         ${BACKWARD_ENABLE})
+# target_link_libraries(network_test PRIVATE common -ldw GTest::GTest GTest::Main)
+# gtest_discover_tests(network_test)
 
 add_executable(ordered_map_test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ordered_map_test.cpp
     ${BACKWARD_ENABLE})
 target_link_libraries(ordered_map_test PRIVATE -ldw GTest::GTest GTest::Main)
 gtest_discover_tests(ordered_map_test)
+
+add_executable(hash_library_test ${hash-library_SOURCE_DIR}/tests/tests.cpp)
+target_link_libraries(hash_library_test PRIVATE hash-library)
