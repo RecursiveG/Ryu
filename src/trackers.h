@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "bencode.h"
+#include "common/bencode.h"
 #include "result.h"
 
 namespace ryu {
@@ -16,7 +16,7 @@ struct PeerInfo {
     std::string peer_id{};
     std::string ip{};
     uint16_t port{};
-    static Result<PeerInfo> FromTrackerReply(const bencode::BencodeMap* map);
+    static Result<PeerInfo, std::string> FromTrackerReply(const bencode::BencodeMap* map);
 };
 
 struct TrackerReply {
@@ -27,8 +27,8 @@ struct TrackerReply {
 
 class Trackers {
   public:
-    static Result<std::vector<PeerInfo>> ParsePeerInfoList(const bencode::BencodeMap& reply);
-    static Result<TrackerReply> GetPeers(const std::string& announce, const std::string& info_hash,
+    static Result<std::vector<PeerInfo>, std::string> ParsePeerInfoList(const bencode::BencodeMap& reply);
+    static Result<TrackerReply, std::string> GetPeers(const std::string& announce, const std::string& info_hash,
                                          uint64_t left_bytes);
 };
 }  // namespace ryu

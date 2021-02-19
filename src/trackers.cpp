@@ -1,8 +1,8 @@
 #include "trackers.h"
 
 #include "absl/strings/str_format.h"
-#include "bencode.h"
-#include "network.h"
+#include "common/bencode.h"
+#include "common/network.h"
 
 namespace ryu {
 using namespace ::ryu::bencode;
@@ -14,7 +14,7 @@ struct CompactIpv4Peer {
     uint16_t be_port;
     [[nodiscard]] PeerInfo ToPeerInfo() const {
         return {
-            .ip = net::IpAddress::FromBe32(be_ipv4).ToString().TakeOrRaise(),
+            .ip = net::IpAddress::FromBe32(be_ipv4).ToString().Expect("Failed to convert IPv4"),
             .port = be16toh(be_port),
         };
     }
@@ -26,7 +26,7 @@ struct CompactIpv6Peer {
     uint16_t be_port;
     [[nodiscard]] PeerInfo ToPeerInfo() const {
         return {
-            .ip = net::IpAddress::FromBe128(be_ipv6).ToString().TakeOrRaise(),
+            .ip = net::IpAddress::FromBe128(be_ipv6).ToString().Expect("Failed to convert IPv6"),
             .port = be16toh(be_port),
         };
     }
@@ -34,16 +34,18 @@ struct CompactIpv6Peer {
 static_assert(sizeof(CompactIpv6Peer) == 18);
 }  // namespace
 
-Result<PeerInfo> PeerInfo::FromTrackerReply(const BencodeMap* map) {
-    auto peer_id = TRY_OPTIONAL(
-        map->try_string("peer id"),
-        absl::StrCat("tracker replied peer dict missing peer id: ", map->json().TakeOrRaise()));
-    auto ip = TRY_OPTIONAL(
-        map->try_string("ip"),
-        absl::StrCat("tracker replied peer dict missing ip: ", map->json().TakeOrRaise()));
-    int64_t port = TRY_OPTIONAL(
-        map->try_int("port"),
-        absl::StrCat("tracker replied peer dict missing port: ", map->json().TakeOrRaise()));
+Result<PeerInfo, std::string> PeerInfo::FromTrackerReply(const BencodeMap* map_ptr) {
+    const BencodeMap& map = *map_ptr;
+
+    auto peer_id = OPTIONAL_OR_RAISE(
+        map["peer id"].GetString(),
+        absl::StrCat("tracker replied peer dict missing peer id: ", map.Json().Expect("")));
+    auto ip = OPTIONAL_OR_RAISE(
+        map["ip"].GetString(),
+        absl::StrCat("tracker replied peer dict missing ip: ", map.Json().Expect("")));
+    int64_t port = OPTIONAL_OR_RAISE(
+        map["port"].GetInt(),
+        absl::StrCat("tracker replied peer dict missing port: ", map.Json().Expect("")));
     if (port < 0 || port >= 65536)
         return Err(absl::StrCat("tracker replied peer port out of range: ", port));
     return PeerInfo{
@@ -53,51 +55,57 @@ Result<PeerInfo> PeerInfo::FromTrackerReply(const BencodeMap* map) {
     };
 }
 
-Result<std::vector<PeerInfo>> Trackers::ParsePeerInfoList(const BencodeMap& reply) {
+Result<std::vector<PeerInfo>, std::string> Trackers::ParsePeerInfoList(const BencodeMap& reply) {
     std::vector<PeerInfo> ret;
 
     // peers
-    if (reply.try_object("peers") == nullptr) return Err("tracker reply missing peers");
-    auto maybe_compat_peer_list = reply.try_string("peers");
-    if (maybe_compat_peer_list) {
+    if (!reply.Contains("peers")) return Err("tracker reply missing peers");
+    if (reply["peers"].IsString()) {
         // BEP-0023 compact IPv4 peer list
-        if (maybe_compat_peer_list->size() % sizeof(CompactIpv4Peer) != 0)
+        std::string peer_list = reply["peers"].GetString().value();
+
+        if (peer_list.size() % sizeof(CompactIpv4Peer) != 0)
             return Err(absl::StrFormat(
                 "tracker replied compact list size incorrect: %u is not a multiple of %u",
-                maybe_compat_peer_list->size(), sizeof(CompactIpv4Peer)));
-        size_t length = maybe_compat_peer_list->size() / sizeof(CompactIpv4Peer);
-        const auto* arr = reinterpret_cast<const CompactIpv4Peer*>(maybe_compat_peer_list->data());
+                peer_list.size(), sizeof(CompactIpv4Peer)));
+        size_t length = peer_list.size() / sizeof(CompactIpv4Peer);
+        const auto* arr = reinterpret_cast<const CompactIpv4Peer*>(peer_list.data());
         for (size_t i = 0; i < length; i++) ret.push_back(arr[i].ToPeerInfo());
-    } else {
+    } else if (reply["peers"].IsList()) {
         // BEP-0003
-        BencodeList* list = reply.try_object("peers")->try_list_object();
+        const BencodeList* list = dynamic_cast<const BencodeList*>(&reply["peers"]);
         if (list == nullptr) return Err("tracker replied peers is neither string nor list");
-        for (size_t i = 0; i < list->size(); i++) {
-            auto* map = TRY_POINTER(list->try_object(i)->try_map_object(),
-                                    "tracker replied peer list contains non-map: " +
-                                        list->try_object(i)->json().TakeOrRaise());
-            ret.push_back(TRY(PeerInfo::FromTrackerReply(map)));
+        for (size_t i = 0; i < list->Size(); i++) {
+            const auto& map = list[i];
+            if (!map.IsMap()) {
+                return Err("tracker replied peer list contains non-map: " +
+                           VALUE_OR_RAISE(map.Json()));
+            }
+            const auto* map_ptr = dynamic_cast<const BencodeMap*>(&map);
+            ret.push_back(VALUE_OR_RAISE(PeerInfo::FromTrackerReply(map_ptr)));
         }
+    } else {
+        return Err(absl::StrCat("tracker reply peers unexpected value: ",
+                                VALUE_OR_RAISE(reply["peers"].Json())));
     }
 
     // peers6, compact only, BEP-0007
-    if (reply.try_object("peers6") != nullptr) {
-        std::string peers6 = TRY_OPTIONAL(reply.try_string("peers6"),
-                                          "tracker replied peers6 is not a string: " +
-                                              reply.try_object("peers6")->json().TakeOrRaise());
-        if (peers6.size() % sizeof(CompactIpv6Peer) != 0)
+    const std::optional<std::string> peers6 = reply["peers6"].GetString();
+    if (peers6) {
+        if (peers6->size() % sizeof(CompactIpv6Peer) != 0)
             return Err(absl::StrFormat(
                 "tracker replied peers6 compact list size incorrect: %u is not a multiple of %u",
-                peers6.size(), sizeof(CompactIpv6Peer)));
-        size_t length = peers6.size() / sizeof(CompactIpv4Peer);
-        const auto* arr = reinterpret_cast<const CompactIpv4Peer*>(peers6.data());
+                peers6->size(), sizeof(CompactIpv6Peer)));
+        size_t length = peers6->size() / sizeof(CompactIpv4Peer);
+        const auto* arr = reinterpret_cast<const CompactIpv4Peer*>(peers6->data());
         for (size_t i = 0; i < length; i++) ret.push_back(arr[i].ToPeerInfo());
     }
 
     return ret;
 }
-Result<TrackerReply> Trackers::GetPeers(const std::string& announce, const std::string& info_hash,
-                                        uint64_t left_bytes) {
+Result<TrackerReply, std::string> Trackers::GetPeers(const std::string& announce,
+                                                     const std::string& info_hash,
+                                                     uint64_t left_bytes) {
     if (info_hash.size() != 20) return Err("invalid info_hash");
     cpr::Response rsp =
         cpr::Get(cpr::Url{announce}, cpr::Parameters{{"info_hash", info_hash},
@@ -118,24 +126,25 @@ Result<TrackerReply> Trackers::GetPeers(const std::string& announce, const std::
     }
     // parse return payload
     size_t idx = 0;
-    ASSIGN_OR_RAISE(auto reply_obj, BencodeObject::parse(rsp.text, &idx));
-    auto reply = TRY_POINTER(reply_obj->try_map_object(),
-                             "tracker reply is not an map: " + reply_obj->json().TakeOrRaise());
+    ASSIGN_OR_RAISE(auto reply_obj, BencodeObject::Parse(rsp.text, &idx));
+    if (!reply_obj->IsMap()) {
+        return Err("tracker reply is not an map: " + VALUE_OR_RAISE(reply_obj->Json()));
+    }
+    const auto& reply = *reply_obj.get();
 
     // prepare return val
     TrackerReply ret;
-    if (reply->try_object("failure reason")) {
+    if (reply.Contains("failure reason")) {
         ret = {
-            .failure_reason =
-                TRY_OPTIONAL(reply->try_string("failure reason"),
-                             "tracker replied failure reason is not string: " +
-                                 reply->try_object("failure reason")->json().TakeOrRaise()),
+            .failure_reason = OPTIONAL_OR_RAISE(reply["failure reason"].GetString(),
+                                                "tracker replied failure reason is not string: " +
+                                                    VALUE_OR_RAISE(reply["failure reason"].Json())),
         };
     } else {
         ret = {
-            .interval = TRY_OPTIONAL(reply->try_int("interval"),
-                                     "tracker reply doesn't contain valid interval"),
-            .peers = TRY(ParsePeerInfoList(*reply)),
+            .interval = OPTIONAL_OR_RAISE(reply["interval"].GetInt(),
+                                          "tracker reply doesn't contain valid interval"),
+            .peers = VALUE_OR_RAISE(ParsePeerInfoList(dynamic_cast<const BencodeMap&>(reply))),
         };
     }
 

@@ -66,6 +66,11 @@ target_link_libraries(torrent_file
     PUBLIC absl::strings absl::str_format bencode
     PRIVATE hash-library)
 
+add_library(trackers STATIC ${CMAKE_CURRENT_SOURCE_DIR}/src/trackers.cpp)
+target_link_libraries(trackers
+    PUBLIC cpr::cpr bencode result
+    PRIVATE absl::str_format)
+
 ##
 ## Testing binaries
 ##
