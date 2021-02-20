@@ -95,6 +95,22 @@ target_link_libraries(torrent_info PRIVATE
     bencode torrent_file trackers hash-library cpr::cpr
 )
 
+##
+## Ryu
+##
+add_executable(ryu
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu/app.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu/rpc_manager.cpp
+    ${BACKWARD_ENABLE}
+)
+target_include_directories(torrent_info PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(ryu PRIVATE
+    -ldw absl::flags absl::flags_parse absl::str_format
+    bencode torrent_file trackers hash-library cpr::cpr
+    PkgConfig::libuv network
+)
+
 # if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/experiments)
 #     add_executable(main
 #         ${CMAKE_CURRENT_SOURCE_DIR}/experiments/main.cpp
