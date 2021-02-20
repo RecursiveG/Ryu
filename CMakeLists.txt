@@ -48,6 +48,9 @@ FetchContent_MakeAvailable(abseil-cpp)
 FetchContent_MakeAvailable(backward-cpp)
 FetchContent_MakeAvailable(hash-library)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(libuv REQUIRED IMPORTED_TARGET libuv)
+
 ##
 ## Components
 ##
@@ -56,6 +59,14 @@ add_library(bencode STATIC
 target_include_directories(bencode PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(bencode PUBLIC result PRIVATE absl::str_format)
+
+add_library(network STATIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network.cpp)
+target_include_directories(network PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(network
+    PUBLIC absl::strings result
+    PRIVATE PkgConfig::libuv)
 
 file(GLOB hash-library_SOURCE_FILES ${hash-library_SOURCE_DIR}/*.cpp)
 add_library(hash-library STATIC ${hash-library_SOURCE_FILES})
@@ -107,7 +118,7 @@ gtest_discover_tests(bencode_test)
 add_executable(network_test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common/network_test.cpp
     ${BACKWARD_ENABLE})
-target_link_libraries(network_test PRIVATE -ldw GTest::GTest GTest::Main absl::strings result)
+target_link_libraries(network_test PRIVATE -ldw GTest::GTest GTest::Main network)
 gtest_discover_tests(network_test)
 
 add_executable(ordered_map_test

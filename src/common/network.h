@@ -13,6 +13,9 @@
 namespace ryu {
 namespace net {
 
+Result<ResultVoid, std::string> ParseAddrPort(std::string addr_str, sockaddr_storage* out,
+                                              uint16_t default_port);
+
 enum class AddressType { IPv6, IPv4 };
 
 // Represent both IPv4 and IPv6 address
