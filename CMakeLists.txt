@@ -102,6 +102,7 @@ add_executable(ryu
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu/app.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu/rpc_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ryu/rpc_client.cpp
     ${BACKWARD_ENABLE}
 )
 target_include_directories(torrent_info PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

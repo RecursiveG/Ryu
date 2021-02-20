@@ -36,7 +36,7 @@ void RpcManager::NewConnection(uv_stream_t* server, int status) {
     assert(server == (uv_stream_t*)socket_.get());
     assert(status == 0);
     std::cout << "Received incoming connection" << std::endl;
-    // TODO
+    app_->AcceptRpcClient(server);
 }
 
 }

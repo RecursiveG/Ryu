@@ -14,6 +14,12 @@ Result<int, std::string> App::Run() {
     return uv_run(loop_, UV_RUN_DEFAULT);
 }
 
+void App::AcceptRpcClient(uv_stream_t* server) {
+    auto client = std::make_shared<RpcClient>(this);
+    client->Accept(server).Expect("Failed to accept client");
+    rpc_clients_[client.get()] = client;
+}
+
 void App::Halt() {
     // TODO
 }
