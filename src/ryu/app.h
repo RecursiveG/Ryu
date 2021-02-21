@@ -23,7 +23,9 @@ class App {
     void Halt();
 
     // Call caused by RpcManager::Halt()
-    void RpcManagerClosed(RpcManager& rpc_manager);
+    void ReleaseRpcManager(RpcManager& rpc_manager);
+    // Called by RpcClient::SocketClosed()/Halt()
+    void ReleaseRpcClient(RpcClient& rpc_client);
 
   private:
     uv_loop_t* const loop_;

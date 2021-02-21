@@ -24,9 +24,16 @@ void App::Halt() {
     // TODO
 }
 
-void App::RpcManagerClosed(RpcManager& rpc_manager) {
+void App::ReleaseRpcManager(RpcManager& rpc_manager) {
     assert(&rpc_manager == rpc_manager_.get());
     rpc_manager_.reset();
+}
+
+void App::ReleaseRpcClient(RpcClient& rpc_client) {
+    auto iter = rpc_clients_.find(&rpc_client);
+    assert(iter != rpc_clients_.end());
+    rpc_clients_.erase(iter);
+    std::cout << "RPC client released, remaining: " << rpc_clients_.size() << std::endl;
 }
 
 }

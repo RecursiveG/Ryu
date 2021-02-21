@@ -32,11 +32,19 @@ Result<ResultVoid, std::string> RpcClient::Accept(uv_stream_t* server) {
 
 void RpcClient::Halt() {
     std::cout << "Halting RpcClient" << std::endl;
-    // TODO
+    if (socket_) {
+        uv_read_stop((uv_stream_t*)socket_.get());
+        uv_close((uv_handle_t*)socket_.get(), uv_callbacks::Close<&RpcClient::SocketClosed>);
+    } else {
+        app_->ReleaseRpcClient(*this);
+    }
 }
 
 void RpcClient::IncomingCommand(std::string str) {
     std::cout << "Received RPC command: " << str << std::endl;
+    if (str == "bye") {
+        Halt();
+    }
 }
 
 void RpcClient::BufferSelection(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
@@ -67,6 +75,11 @@ void RpcClient::IncomingData(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
         memmove(data_buf_.get(), data_buf_.get() + st, new_size);
         buf_size_ = new_size;
     }
+}
+
+void RpcClient::SocketClosed(uv_handle_t* handle) {
+    assert(handle == (uv_handle_t*)socket_.get());
+    app_->ReleaseRpcClient(*this);
 }
 
 }  // namespace ryu
