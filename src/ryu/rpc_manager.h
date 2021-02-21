@@ -17,9 +17,13 @@ class RpcManager {
 
         // UV callback when new incoming connection
         void NewConnection(uv_stream_t* server, int status);
+
+        // UV callback
+        void SocketClosed(uv_handle_t* handle);
     private:
         App* const app_;
         std::unique_ptr<uv_tcp_t> socket_;
+        bool draining_ = false;
 };
 
 }

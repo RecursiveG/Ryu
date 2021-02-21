@@ -29,14 +29,25 @@ Result<ResultVoid, std::string> RpcManager::Listen(std::string listen_addr, uv_l
 }
 
 void RpcManager::Halt() {
-    // TODO
+    draining_ = true;
+    if (socket_) {
+        uv_close((uv_handle_t*)socket_.get(), uv_callbacks::Close<&RpcManager::SocketClosed>);
+    } else {
+        app_->ReleaseRpcManager(*this);
+    }
 }
 
 void RpcManager::NewConnection(uv_stream_t* server, int status) {
     assert(server == (uv_stream_t*)socket_.get());
     assert(status == 0);
+    if (draining_) return;
     std::cout << "Received incoming connection" << std::endl;
     app_->AcceptRpcClient(server);
+}
+
+void RpcManager::SocketClosed(uv_handle_t* handle) {
+    assert(handle == (uv_handle_t*)socket_.get());
+    app_->ReleaseRpcManager(*this);
 }
 
 }

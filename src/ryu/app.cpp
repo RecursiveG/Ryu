@@ -21,12 +21,24 @@ void App::AcceptRpcClient(uv_stream_t* server) {
 }
 
 void App::Halt() {
-    // TODO
+    draining_ = true;
+    if (rpc_manager_) rpc_manager_->Halt();
+    for (auto& [client, ptr] : rpc_clients_) {
+        client->Halt();
+    }
+}
+
+void App::CheckDrainState() {
+    if (!draining_) return;
+    if (rpc_manager_) return;
+    if (!rpc_clients_.empty()) return;
+    uv_stop(loop_);
 }
 
 void App::ReleaseRpcManager(RpcManager& rpc_manager) {
     assert(&rpc_manager == rpc_manager_.get());
     rpc_manager_.reset();
+    CheckDrainState();
 }
 
 void App::ReleaseRpcClient(RpcClient& rpc_client) {
@@ -34,6 +46,7 @@ void App::ReleaseRpcClient(RpcClient& rpc_client) {
     assert(iter != rpc_clients_.end());
     rpc_clients_.erase(iter);
     std::cout << "RPC client released, remaining: " << rpc_clients_.size() << std::endl;
+    CheckDrainState();
 }
 
 }

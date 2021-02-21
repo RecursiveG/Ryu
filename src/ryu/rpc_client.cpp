@@ -44,6 +44,8 @@ void RpcClient::IncomingCommand(std::string str) {
     std::cout << "Received RPC command: " << str << std::endl;
     if (str == "bye") {
         Halt();
+    } else if (str == "stop") {
+        app_->Halt();
     }
 }
 
