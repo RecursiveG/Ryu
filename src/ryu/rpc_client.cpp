@@ -58,11 +58,13 @@ void RpcClient::BufferSelection(uv_handle_t* handle, size_t suggested_size, uv_b
 void RpcClient::IncomingData(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
     if (nread == UV_EOF) {
         Halt();
+        return;
     } else if (nread < 0) {
         Halt();
+        return;
     } else if (nread == 0) {
         return;
-    } 
+    }
 
     size_t st = 0;
     for (size_t idx = buf_size_; idx < buf_size_ + nread; idx++) {
