@@ -31,13 +31,38 @@ Result<ResultVoid, std::string> RpcClient::Accept(uv_stream_t* server) {
 }
 
 void RpcClient::Halt() {
+    // finishes all write
+    // shutdown write end
+    // read until eof
+    // close socket
+    // notify app
     std::cout << "Halting RpcClient" << std::endl;
-    if (socket_) {
-        uv_read_stop((uv_stream_t*)socket_.get());
-        uv_close((uv_handle_t*)socket_.get(), uv_callbacks::Close<&RpcClient::SocketClosed>);
-    } else {
-        app_->ReleaseRpcClient(*this);
+    draining_ = true;
+
+    shutdown_req_.data = this;
+    uv_shutdown(&shutdown_req_, (uv_stream_t*)socket_.get(), uv_callbacks::Shutdown<&RpcClient::SocketShutdownComplete>);
+}
+
+void RpcClient::SocketShutdownComplete(uv_shutdown_t* req, int status) {
+    assert(status == 0);
+    assert(req = &shutdown_req_);
+    socket_shutdown_ = true;
+    CheckSocketReadyToClose();
+}
+
+void RpcClient::CheckSocketReadyToClose() {
+    if (!draining_) {
+        // socket shutdown haven't been issued, halting caused by eof.
+        Halt();
+        return;
     }
+    if (!socket_eof_ || !socket_shutdown_) return;
+    uv_close((uv_handle_t*)socket_.get(), uv_callbacks::Close<&RpcClient::SocketClosed>);
+}
+
+void RpcClient::SocketClosed(uv_handle_t* handle) {
+    assert(handle == (uv_handle_t*)socket_.get());
+    app_->ReleaseRpcClient(*this);
 }
 
 void RpcClient::IncomingCommand(std::string str) {
@@ -46,6 +71,15 @@ void RpcClient::IncomingCommand(std::string str) {
         Halt();
     } else if (str == "stop") {
         app_->Halt();
+    } else if (str == "ping") {
+        auto buf = std::make_unique<UvWriteBuf>(5);
+        buf->buffer()[0] = 'p';
+        buf->buffer()[1] = 'o';
+        buf->buffer()[2] = 'n';
+        buf->buffer()[3] = 'g';
+        buf->buffer()[4] = '\n';
+        buf->write(5, (uv_stream_t*)socket_.get(), this, uv_callbacks::Write<&RpcClient::WriteFinishes>);
+        outgoing_[buf.get()] = std::move(buf);
     }
 }
 
@@ -57,7 +91,8 @@ void RpcClient::BufferSelection(uv_handle_t* handle, size_t suggested_size, uv_b
 
 void RpcClient::IncomingData(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
     if (nread == UV_EOF) {
-        Halt();
+        socket_eof_ = true;
+        CheckSocketReadyToClose();
         return;
     } else if (nread < 0) {
         Halt();
@@ -81,9 +116,11 @@ void RpcClient::IncomingData(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
     }
 }
 
-void RpcClient::SocketClosed(uv_handle_t* handle) {
-    assert(handle == (uv_handle_t*)socket_.get());
-    app_->ReleaseRpcClient(*this);
+void RpcClient::WriteFinishes(uv_write_t* write_req, int status) {
+    auto iter = outgoing_.find((UvWriteBuf*)write_req);
+    assert(iter != outgoing_.end());
+    assert(status == 0);
+    outgoing_.erase(iter);
 }
 
 }  // namespace ryu
