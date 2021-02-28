@@ -81,5 +81,12 @@ void Connection(uv_stream_t* server, int status) {
     (obj->*member_ptr)(server, status);
 }
 
+template <auto member_ptr>
+void Fs(uv_fs_t* req) {
+    USING_CLASS_TYPE;
+    ClassType* obj = static_cast<ClassType*>(req->data);
+    (obj->*member_ptr)(req);
+}
+
 #undef USING_CLASS_TYPE
 }  // namespace ryu::uv_callbacks

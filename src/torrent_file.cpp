@@ -1,9 +1,11 @@
 #include "torrent_file.h"
 
 #include <fstream>
+#include <iostream>
 #include <string>
 
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "sha1.h"
 using namespace std;
 
@@ -116,6 +118,51 @@ Result<TorrentFile, std::string> TorrentFile::LoadFile(absl::string_view file_pa
         return TorrentFile::Load(data);
     } else {
         return Err(absl::StrCat("failed to open torrent file: ", file_path));
+    }
+}
+
+void TorrentFile::Dump(bool list_all_hashes) {
+    using std::cout;
+    using std::end;
+
+    auto MaybeTimeToStr = [](std::optional<absl::Time> t) -> string {
+        if (!t) return "(-- no data --)";
+        return absl::FormatTime(*t, absl::LocalTimeZone());
+    };
+    const auto& torrent = *this;
+    cout << "Torrent name: " << torrent.name() << endl;
+    cout << "Announce URLs:" << endl;
+    cout << "  - " << torrent.announce() << endl;
+    auto al = torrent.announce_list();
+    if (al) {
+        for (const auto& g : *al) {
+            for (const auto& u : g) {
+                cout << "  - " << u << endl;
+            }
+        }
+    }
+    cout << "Created: " << MaybeTimeToStr(torrent.creation_date()) << endl;
+    cout << "Created by: " << torrent.created_by().value_or("(-- no data --)") << endl;
+    cout << "Comment: " << torrent.comment().value_or("(-- no data --)") << endl;
+    cout << "InfoHash: " << torrent.GetInfoHexHash() << endl;
+    cout << absl::StrFormat("There are %u(%.02fMB) files, %u pieces. Piece size %.02fKB",
+                            torrent.GetFileCount(), torrent.GetTotalSize() / 1024.0 / 1024.0,
+                            torrent.GetPieceCount(), torrent.GetPieceSize() / 1024.0)
+         << endl;
+    for (size_t i = 0; i < torrent.GetFileCount(); i++) {
+        cout << absl::StrFormat("File #%03u %8.02fMB %s", i + 1,
+                                torrent.GetFileInfo(i).length / 1024.0 / 1024.0,
+                                absl::StrJoin(torrent.GetFileInfo(i).path, "/"))
+             << endl;
+    }
+    for (size_t i = 0; i < torrent.GetPieceCount(); i++) {
+        if (i >= 10 && !list_all_hashes) {
+            cout << "(-- more hashes hidden --)" << endl;
+            break;
+        }
+        cout << absl::StrFormat("Piece #%04u %8.02fKB HASH=%s", i + 1,
+                                torrent.GetPieceSize(i) / 1024.0, torrent.GetPieceHexHash(i))
+             << endl;
     }
 }
 

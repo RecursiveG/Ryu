@@ -35,6 +35,11 @@ void App::CheckDrainState() {
     uv_stop(loop_);
 }
 
+void App::CreateTask(std::string torrent_file_name) {
+    auto task = std::make_shared<Task>(this, loop_, torrent_file_name);
+    tasks_[task.get()] = task;
+}
+
 void App::ReleaseRpcManager(RpcManager& rpc_manager) {
     assert(&rpc_manager == rpc_manager_.get());
     rpc_manager_.reset();

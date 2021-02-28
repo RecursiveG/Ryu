@@ -85,6 +85,8 @@ class TorrentFile {
     std::string GetInfoHash() const { return info_hash_; }
     std::string GetInfoHexHash() const { return ToHex(GetInfoHash()); }
 
+    void Dump(bool list_all_hashes = false);
+
   private:
     std::unique_ptr<bencode::BencodeObject> data_;
 

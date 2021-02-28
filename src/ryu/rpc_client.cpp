@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cassert>
 #include <cstring>
+#include "absl/strings/match.h"
 
 namespace ryu {
 
@@ -80,6 +81,8 @@ void RpcClient::IncomingCommand(std::string str) {
         buf->buffer()[4] = '\n';
         buf->write(5, (uv_stream_t*)socket_.get(), this, uv_callbacks::Write<&RpcClient::WriteFinishes>);
         outgoing_[buf.get()] = std::move(buf);
+    } else if (absl::StartsWithIgnoreCase(str, "CreateTask ")) {
+        app_->CreateTask(str.substr(11));
     }
 }
 
